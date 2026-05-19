@@ -1,6 +1,6 @@
 import json
 import os
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, fields as dataclass_fields
 from typing import Optional
 
 _DEFAULT_PATH = "contacts/contacts.json"
@@ -13,42 +13,40 @@ class ContactProfile:
     company: str = ""
     relationship_type: str = ""
     notes: str = ""
+    tone: str = ""   # Formal / Professional / Casual / Brief — overrides global persona
 
 
 class ContactStore:
-    """
-    JSON-backed store for contact profiles, keyed by email address.
-    The file is read fresh on every lookup to prevent stale data in the
-    long-running daemon process.
-    """
-
     def __init__(self, path: str = _DEFAULT_PATH) -> None:
         self._path = path
         self._ensure_file()
 
     def lookup(self, email: str) -> Optional[ContactProfile]:
-        """Return the ContactProfile for the given email, or None if not found."""
         data = self._load()
         record = data.get(email.lower())
         if record is None:
             return None
-        return ContactProfile(**record)
+        return self._make(record)
 
     def upsert(self, profile: ContactProfile) -> None:
-        """Create or fully replace the profile for profile.email."""
         data = self._load()
         data[profile.email.lower()] = asdict(profile)
         self._save(data)
 
     def list_all(self) -> list[ContactProfile]:
-        """Return all stored profiles sorted by email."""
         data = self._load()
         return sorted(
-            [ContactProfile(**v) for v in data.values()],
+            [self._make(v) for v in data.values()],
             key=lambda p: p.email,
         )
 
     # ── Private ────────────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _make(record: dict) -> ContactProfile:
+        """Construct ContactProfile, ignoring unknown keys for backward compatibility."""
+        known = {f.name for f in dataclass_fields(ContactProfile)}
+        return ContactProfile(**{k: v for k, v in record.items() if k in known})
 
     def _ensure_file(self) -> None:
         os.makedirs(os.path.dirname(self._path), exist_ok=True)

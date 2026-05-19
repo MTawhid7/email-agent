@@ -37,6 +37,17 @@
             class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
         </div>
         <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">Reply Tone</label>
+          <select name="tone"
+            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <option value="">Default (use global persona)</option>
+            <option value="Formal">Formal</option>
+            <option value="Professional">Professional</option>
+            <option value="Casual">Casual</option>
+            <option value="Brief">Brief</option>
+          </select>
+        </div>
+        <div class="col-span-2">
           <label class="block text-xs font-medium text-gray-600 mb-1">Notes</label>
           <input type="text" name="notes" placeholder="Prefers brief replies…"
             class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
@@ -70,7 +81,10 @@
               <p class="text-xs text-gray-400">{{ contact.email }}</p>
             </td>
             <td class="px-4 py-3 text-gray-600">{{ contact.company or '—' }}</td>
-            <td class="px-4 py-3 text-gray-500 max-w-xs truncate">{{ contact.notes or '—' }}</td>
+            <td class="px-4 py-3 text-gray-500">
+              {% if contact.tone %}<span class="text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">{{ contact.tone }}</span>{% endif %}
+              <span class="truncate block max-w-xs">{{ contact.notes or '—' }}</span>
+            </td>
             <td class="px-4 py-3 text-right">
               <button onclick="deleteContact('{{ contact.email }}')"
                 class="text-xs text-red-500 hover:text-red-700 font-medium">Delete</button>

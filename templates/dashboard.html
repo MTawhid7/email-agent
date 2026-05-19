@@ -148,9 +148,10 @@
             const color = entry.level === 'success' ? 'text-green-700'
                         : entry.level === 'error'   ? 'text-red-600'
                         : 'text-gray-600';
-            div.className = 'flex gap-2 py-0.5';
-            div.innerHTML = `<span class="text-gray-400 shrink-0">${entry.timestamp}</span>
-                             <span class="${color}">${entry.message}</span>`;
+            div.className = 'py-0.5';
+            const summary = entry.summary ? `<div class="text-gray-400 ml-32 -mt-0.5">${entry.summary}</div>` : '';
+            div.innerHTML = `<div class="flex gap-2"><span class="text-gray-400 shrink-0">${entry.timestamp}</span>
+                             <span class="${color}">${entry.message}</span></div>${summary}`;
             container.appendChild(div);
           });
           lastLogCount = data.logs.length;

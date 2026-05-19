@@ -27,6 +27,7 @@ def contacts_add():
         company=request.form.get("company", "").strip(),
         relationship_type=request.form.get("relationship_type", "").strip(),
         notes=request.form.get("notes", "").strip(),
+        tone=request.form.get("tone", "").strip(),
     )
     _store().upsert(profile)
     return redirect(url_for("contacts.contacts"))

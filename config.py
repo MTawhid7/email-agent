@@ -20,6 +20,7 @@ class Settings:
     signature_phone: str
     # Dynamic list of {"label": str, "url": str} dicts — replaces fixed social fields
     social_links: tuple
+    auto_translate: bool = False
 
 
 def _require(key: str) -> str:
@@ -93,6 +94,7 @@ def load_settings_from_dict(data: dict) -> Settings:
         signature_company=optional("signature_company"),
         signature_phone=optional("signature_phone"),
         social_links=_parse_social_links(data),
+        auto_translate=str(data.get("auto_translate", "false")).lower() in ("true", "1", "yes"),
     )
 
 

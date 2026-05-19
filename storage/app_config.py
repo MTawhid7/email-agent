@@ -125,3 +125,63 @@ def get_contacts_path() -> str:
 
 def get_data_dir() -> str:
     return str(_data_dir())
+
+
+# ── Templates ──────────────────────────────────────────────────────────────────
+
+def get_templates_path() -> str:
+    return str(_data_dir() / "templates.json")
+
+
+def load_templates() -> list[dict]:
+    p = Path(get_templates_path())
+    if not p.exists():
+        _seed_default_templates(p)
+    with open(p, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def save_templates(templates: list[dict]) -> None:
+    p = Path(get_templates_path())
+    p.parent.mkdir(parents=True, exist_ok=True)
+    with open(p, "w", encoding="utf-8") as f:
+        json.dump(templates, f, indent=2, ensure_ascii=False)
+
+
+def _seed_default_templates(path: Path) -> None:
+    import uuid as _uuid
+    defaults = [
+        {"id": str(_uuid.uuid4()), "category": "Acknowledgement", "name": "Received & reviewing",
+         "body": "Thank you for reaching out. I've received your message and will review it shortly. I'll get back to you by [date]."},
+        {"id": str(_uuid.uuid4()), "category": "Acknowledgement", "name": "Out of office",
+         "body": "Thank you for your email. I'm currently out of the office until [date]. For urgent matters, please contact [name] at [email]."},
+        {"id": str(_uuid.uuid4()), "category": "Meetings", "name": "Confirm meeting",
+         "body": "Happy to connect. I'm available [day] at [time] or [alternative]. Please let me know which works best."},
+        {"id": str(_uuid.uuid4()), "category": "Meetings", "name": "Decline meeting",
+         "body": "Thank you for the invitation. Unfortunately I'm unavailable at that time. Could we explore [alternative date or format]?"},
+        {"id": str(_uuid.uuid4()), "category": "Meetings", "name": "Reschedule request",
+         "body": "I need to reschedule our meeting. Would [new day and time] work for you?"},
+        {"id": str(_uuid.uuid4()), "category": "Business", "name": "Information request response",
+         "body": "Thank you for your inquiry. I've included the relevant information below. Please don't hesitate to follow up if you have further questions."},
+        {"id": str(_uuid.uuid4()), "category": "Business", "name": "Proposal acknowledgement",
+         "body": "Thank you for sending over your proposal. I've had a chance to review it and would like to discuss a few points further."},
+        {"id": str(_uuid.uuid4()), "category": "Business", "name": "Approval",
+         "body": "I've reviewed the details and am happy to proceed. Please go ahead as discussed."},
+        {"id": str(_uuid.uuid4()), "category": "Business", "name": "Decline / not interested",
+         "body": "Thank you for thinking of us. After careful consideration, we won't be moving forward at this time. We appreciate the opportunity."},
+        {"id": str(_uuid.uuid4()), "category": "Support", "name": "Issue acknowledged",
+         "body": "Thank you for bringing this to our attention. I've escalated this to the relevant team and will keep you updated on the progress."},
+        {"id": str(_uuid.uuid4()), "category": "Support", "name": "Issue resolved",
+         "body": "I'm pleased to let you know that the issue has been resolved. Please don't hesitate to reach out if you experience anything further."},
+        {"id": str(_uuid.uuid4()), "category": "Support", "name": "Delay / apology",
+         "body": "I apologise for the delay in responding. Thank you for your patience — I'll address this right away."},
+        {"id": str(_uuid.uuid4()), "category": "Networking", "name": "Introduction response",
+         "body": "Great to connect! I'd love to learn more about what you're working on. Happy to schedule a brief call if that works for you."},
+        {"id": str(_uuid.uuid4()), "category": "Networking", "name": "Referral / recommendation thanks",
+         "body": "Thank you so much for the introduction and kind words. I really appreciate it."},
+        {"id": str(_uuid.uuid4()), "category": "Networking", "name": "Job application acknowledgement",
+         "body": "Thank you for your application. We've received it and will be in touch within [timeframe]."},
+    ]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(defaults, f, indent=2, ensure_ascii=False)

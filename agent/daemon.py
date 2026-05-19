@@ -1,15 +1,18 @@
 import logging
 import threading
 import time
+import uuid
 from collections import deque
 from datetime import date, datetime
 from typing import Optional
 
-from ai.prompts import build_user_message
+from ai.prompts import build_classification_prompt, build_summary_prompt, build_user_message
 from ai.reply_generator import ReplyGenerator
+from agent.review_queue import review_queue
 from assembler import assemble
 from config import load_settings_from_dict
 from contacts.contact_store import ContactStore
+from email_parser.attachment_reader import fetch_and_summarise
 from email_parser.parser import parse_thread
 from exceptions import AuthError, EmailAgentError
 from gmail_client.auth import get_credentials
@@ -25,13 +28,11 @@ from storage.app_config import (
 logger = logging.getLogger(__name__)
 
 _MAX_LOG_ENTRIES = 100
+_PRIORITY_EMOJI = {"high": "🔴", "normal": "🟡", "low": "⚪", "skip": "⏭"}
 
 
 class AgentDaemon:
-    """
-    Wraps the email processing loop in a background thread.
-    All public methods and properties are thread-safe.
-    """
+    """Background email processing daemon. All public methods are thread-safe."""
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
@@ -50,11 +51,7 @@ class AgentDaemon:
                 return
             self._stop_event.clear()
             self._error = None
-            self._thread = threading.Thread(
-                target=self._run_loop,
-                name="AgentDaemon",
-                daemon=True,
-            )
+            self._thread = threading.Thread(target=self._run_loop, name="AgentDaemon", daemon=True)
             self._thread.start()
             self._append_log("info", "Agent started.")
 
@@ -80,6 +77,7 @@ class AgentDaemon:
                 "logs": list(self._logs),
                 "draft_count": self._draft_count_today,
                 "error": self._error,
+                "review_count": review_queue.count(),
             }
 
     # ── Internal loop ──────────────────────────────────────────────────────────
@@ -97,10 +95,10 @@ class AgentDaemon:
         while not self._stop_event.is_set():
             try:
                 count = self._process_unread(gmail, generator, contact_store, signature_html)
-                if count:
-                    self._increment_draft_count(count)
-                else:
+                if not count:
                     self._append_log("info", "No new emails.")
+                else:
+                    self._increment_draft_count(count)
             except AuthError as exc:
                 self._set_error(f"Auth error: {exc}")
                 return
@@ -109,7 +107,6 @@ class AgentDaemon:
             except Exception as exc:
                 self._append_log("error", f"Unexpected error: {exc}")
 
-            # Sleep in 0.5s increments so stop_event is checked frequently
             for _ in range(settings.poll_interval_seconds * 2):
                 if self._stop_event.is_set():
                     break
@@ -118,15 +115,11 @@ class AgentDaemon:
     def _build_components(self):
         raw = load_config()
         settings = load_settings_from_dict(raw)
-        creds = get_credentials(
-            credentials_path=get_credentials_path(),
-            token_path=get_token_path(),
-        )
+        creds = get_credentials(credentials_path=get_credentials_path(), token_path=get_token_path())
         gmail = GmailClient(creds)
         generator = ReplyGenerator(settings)
         contact_store = ContactStore(path=get_contacts_path())
-        sig_builder = SignatureBuilder(settings)
-        signature_html = sig_builder.build_html()
+        signature_html = SignatureBuilder(settings).build_html()
         return settings, gmail, generator, contact_store, signature_html
 
     def _process_unread(
@@ -147,29 +140,73 @@ class AgentDaemon:
                     continue
 
                 contact = contact_store.lookup(parsed.sender_email)
-                user_message = build_user_message(parsed, contact, mode="reply")
+
+                # ── Feature 4: Thread summary ──────────────────────────────────
+                summary = generator.summarise(build_summary_prompt(parsed))
+
+                # ── Feature 2: Classify + newsletter detection ─────────────────
+                classification = generator.classify(build_classification_prompt(parsed, contact))
+                priority = classification["priority"]
+
+                if classification["skip"]:
+                    gmail.mark_as_processed(parsed.latest_message_id)
+                    self._append_log(
+                        "info",
+                        f"⏭ Skipped ({classification['reason']}): {parsed.sender_name}",
+                        summary=summary, priority="skip",
+                    )
+                    continue
+
+                if priority == "high":
+                    gmail.apply_priority_label(parsed.latest_message_id)
+
+                # ── Feature 7: Attachment summarisation ────────────────────────
+                attachment_summary = ""
+                if parsed.attachments:
+                    attachment_summary = fetch_and_summarise(
+                        gmail_client=gmail,
+                        message_id=parsed.latest_message_id,
+                        attachments=parsed.attachments,
+                        gemini_client=generator._client,
+                        model=generator._model,
+                    )
+
+                # ── Generate reply ─────────────────────────────────────────────
+                user_message = build_user_message(
+                    parsed, contact, mode="reply",
+                    attachment_summary=attachment_summary,
+                )
                 body = generator.generate(user_message)
                 final_html = assemble(parsed.sender_first_name, body, signature_html)
 
                 reply_subject = (
-                    parsed.subject
-                    if parsed.subject.lower().startswith("re:")
+                    parsed.subject if parsed.subject.lower().startswith("re:")
                     else f"Re: {parsed.subject}"
                 )
 
-                gmail.create_draft(
-                    to=parsed.sender_email,
-                    subject=reply_subject,
-                    body_html=final_html,
-                    thread_id=parsed.thread_id,
-                    in_reply_to=parsed.message_id_header,
-                    references=parsed.message_id_header,
-                )
+                # ── Feature 1: Push to review queue ────────────────────────────
+                review_queue.push({
+                    "id": str(uuid.uuid4()),
+                    "sender_name": parsed.sender_name,
+                    "sender_email": parsed.sender_email,
+                    "subject": reply_subject,
+                    "thread_id": parsed.thread_id,
+                    "message_id_header": parsed.message_id_header,
+                    "latest_message_id": parsed.latest_message_id,
+                    "body_html": final_html,
+                    "created_at": datetime.now().isoformat(),
+                    "priority": priority,
+                    "summary": summary,
+                })
+
+                # Mark processed immediately so it won't be re-queued next poll
                 gmail.mark_as_processed(parsed.latest_message_id)
 
+                emoji = _PRIORITY_EMOJI.get(priority, "🟡")
                 self._append_log(
                     "success",
-                    f"Draft created for {parsed.sender_name} <{parsed.sender_email}>",
+                    f"{emoji} Queued for review: {parsed.sender_name} <{parsed.sender_email}>",
+                    summary=summary, priority=priority,
                 )
                 count += 1
 
@@ -182,20 +219,22 @@ class AgentDaemon:
 
     # ── Helpers ────────────────────────────────────────────────────────────────
 
-    def _append_log(self, level: str, message: str) -> None:
-        """Append a log entry. Must be called while self._lock is held or internally."""
+    def _append_log(self, level: str, message: str, summary: str = "", priority: str = "") -> None:
         entry = {
             "level": level,
             "message": message,
             "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "summary": summary,
+            "priority": priority,
         }
-        self._logs.append(entry)
+        with self._lock:
+            self._logs.append(entry)
         getattr(logger, "info" if level in ("info", "success") else level, logger.info)(message)
 
     def _set_error(self, message: str) -> None:
         with self._lock:
             self._error = message
-            self._append_log("error", message)
+        self._append_log("error", message)
 
     def _increment_draft_count(self, n: int) -> None:
         with self._lock:

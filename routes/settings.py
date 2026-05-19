@@ -27,6 +27,7 @@ def settings():
             "signature_company": request.form.get("signature_company", "").strip(),
             "signature_phone": request.form.get("signature_phone", "").strip(),
             "social_links": _parse_social_links_from_form(request.form),
+            "auto_translate": request.form.get("auto_translate") == "true",
         }
 
         if not updated["gemini_api_key"]:

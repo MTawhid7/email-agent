@@ -28,6 +28,17 @@
               class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
           </div>
         </div>
+        <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+          <div>
+            <p class="text-sm font-medium text-gray-700">Auto-translate replies</p>
+            <p class="text-xs text-gray-400">Detect the incoming email's language and reply in the same language.</p>
+          </div>
+          <label class="relative inline-flex items-center cursor-pointer">
+            <input type="checkbox" name="auto_translate" value="true" class="sr-only peer"
+              {% if config.get('auto_translate') %}checked{% endif %}>
+            <div class="w-10 h-5 bg-gray-200 peer-focus:ring-2 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-5 peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+          </label>
+        </div>
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">Persona Instructions</label>
           <textarea name="persona_prompt" rows="4"

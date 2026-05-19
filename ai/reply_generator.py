@@ -1,3 +1,4 @@
+import json
 import logging
 import time
 
@@ -19,16 +20,49 @@ class ReplyGenerator:
     def __init__(self, settings: Settings) -> None:
         self._client = genai.Client(api_key=settings.gemini_api_key)
         self._model = settings.gemini_model
-        self._system_prompt = build_system_prompt(settings.persona_prompt)
+        auto_translate = getattr(settings, "auto_translate", False)
+        self._system_prompt = build_system_prompt(settings.persona_prompt, auto_translate)
 
     def generate(self, user_message: str) -> str:
-        """
-        Generate an email body from the given user message.
-        Retries on rate limit (429). Raises GenerationError on unrecoverable failures.
-        """
-        config = types.GenerateContentConfig(
-            system_instruction=self._system_prompt,
+        """Generate an email body. Retries on rate limit."""
+        return self._call(
+            user_message,
+            system="You are an email assistant.",
+            use_persona=True,
         )
+
+    def classify(self, user_message: str) -> dict:
+        """
+        Classify an email's priority. Returns {"priority", "reason", "skip"}.
+        Never raises — falls back to normal on any error.
+        """
+        try:
+            text = self._call(user_message, system="You are an email classifier. Return JSON only.")
+            # Strip markdown fences if present
+            if "```" in text:
+                text = text.split("```")[1]
+                if text.startswith("json"):
+                    text = text[4:]
+            data = json.loads(text.strip())
+            priority = str(data.get("priority", "normal")).lower()
+            if priority not in ("high", "normal", "low", "skip"):
+                priority = "normal"
+            return {"priority": priority, "reason": data.get("reason", ""), "skip": priority == "skip"}
+        except Exception:
+            return {"priority": "normal", "reason": "", "skip": False}
+
+    def summarise(self, user_message: str) -> str:
+        """Generate a one-sentence thread summary. Never raises."""
+        try:
+            return self._call(user_message, system="You are a concise email summariser.")
+        except Exception:
+            return ""
+
+    # ── Internal ───────────────────────────────────────────────────────────────
+
+    def _call(self, user_message: str, system: str, use_persona: bool = False) -> str:
+        instruction = self._system_prompt if use_persona else system
+        config = types.GenerateContentConfig(system_instruction=instruction)
 
         for attempt in range(_MAX_RETRIES + 1):
             try:
@@ -64,5 +98,4 @@ class ReplyGenerator:
             except ServerError as exc:
                 raise GenerationError(f"Gemini server error (5xx): {exc}") from exc
 
-        # Unreachable, but satisfies type checker
         raise GenerationError("Gemini generation failed after all retries.")
