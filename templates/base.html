@@ -4,91 +4,143 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{% block title %}Email Agent{% endblock %}</title>
-  <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
 </head>
-<body class="bg-gray-50 min-h-screen flex">
+<body x-data>
 
-  <!-- Sidebar -->
-  <aside class="w-56 bg-white border-r border-gray-200 flex flex-col fixed inset-y-0 left-0 z-10">
-    <div class="px-5 py-5 border-b border-gray-100">
-      <span class="text-base font-semibold text-gray-900">✉ Email Agent</span>
+<div class="app-shell">
+
+  {# ── Sidebar ────────────────────────────────────────────────────────────── #}
+  <aside class="sidebar" role="navigation" aria-label="Main navigation">
+
+    {# Brand #}
+    <div class="sidebar-brand">
+      <div class="sidebar-brand-icon" aria-hidden="true">
+        <svg width="16" height="16" fill="none" stroke="white" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75"/>
+        </svg>
+      </div>
+      <span class="sidebar-brand-name">Email Agent</span>
     </div>
-    <nav class="flex-1 px-3 py-4 space-y-1">
-      <a href="/dashboard" class="nav-link {% if request.path == '/dashboard' %}active{% endif %}">
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
+
+    {# Navigation #}
+    <nav class="sidebar-nav">
+
+      <a href="/dashboard"
+        class="nav-item {% if request.path == '/dashboard' %}active{% endif %}"
+        aria-current="{% if request.path == '/dashboard' %}page{% endif %}">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>
+        </svg>
         Dashboard
       </a>
-      <a href="/settings" class="nav-link {% if request.path == '/settings' %}active{% endif %}">
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
-        Settings
-      </a>
-      <a href="/review" class="nav-link {% if request.path == '/review' %}active{% endif %}">
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+
+      <a href="/review"
+        class="nav-item {% if request.path == '/review' %}active{% endif %}"
+        aria-current="{% if request.path == '/review' %}page{% endif %}">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+        </svg>
         Review
-        <span id="nav-review-badge" class="hidden ml-auto text-xs font-semibold bg-blue-600 text-white rounded-full px-1.5 py-0.5 min-w-[1.25rem] text-center"></span>
+        <span
+          x-data
+          x-show="$store.review.count > 0"
+          x-text="$store.review.count"
+          class="nav-badge"
+          aria-label="pending reviews"
+        ></span>
       </a>
-      <a href="/contacts" class="nav-link {% if request.path == '/contacts' %}active{% endif %}">
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
-        Contacts
-      </a>
-      <a href="/bulk" class="nav-link {% if request.path == '/bulk' %}active{% endif %}">
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
-        Bulk Send
-      </a>
-      <a href="/templates" class="nav-link {% if request.path == '/templates' %}active{% endif %}">
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h10"/></svg>
-        Templates
-      </a>
+
+      <div class="sidebar-section">
+        <div class="sidebar-section-label">Manage</div>
+
+        <a href="/contacts"
+          class="nav-item {% if request.path == '/contacts' %}active{% endif %}"
+          aria-current="{% if request.path == '/contacts' %}page{% endif %}">
+          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/>
+          </svg>
+          Contacts
+        </a>
+
+        <a href="/templates"
+          class="nav-item {% if request.path == '/templates' %}active{% endif %}"
+          aria-current="{% if request.path == '/templates' %}page{% endif %}">
+          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 10h16M4 14h10"/>
+          </svg>
+          Templates
+        </a>
+
+        <a href="/bulk"
+          class="nav-item {% if request.path == '/bulk' %}active{% endif %}"
+          aria-current="{% if request.path == '/bulk' %}page{% endif %}">
+          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+          </svg>
+          Bulk Send
+        </a>
+      </div>
+
+      <div class="sidebar-section">
+        <div class="sidebar-section-label">Config</div>
+        <a href="/settings"
+          class="nav-item {% if request.path == '/settings' %}active{% endif %}"
+          aria-current="{% if request.path == '/settings' %}page{% endif %}">
+          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+            <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+          </svg>
+          Settings
+        </a>
+      </div>
+
     </nav>
+
+    {# Agent status in sidebar footer #}
+    <div class="sidebar-footer" x-data>
+      <div class="agent-status-pill">
+        <span class="status-dot" :class="$store.agent.statusDotClass"></span>
+        <span x-text="$store.agent.statusLabel" style="font-size:var(--text-xs);"></span>
+      </div>
+    </div>
+
   </aside>
 
-  <!-- Main content -->
-  <div class="ml-56 flex-1 flex flex-col min-h-screen">
-    <!-- Flash messages -->
+  {# ── Main content ───────────────────────────────────────────────────────── #}
+  <main class="main" id="main-content">
+
+    {# Flash messages → toasts #}
     {% with messages = get_flashed_messages(with_categories=true) %}
       {% if messages %}
-        <div id="toast-container" class="fixed top-4 right-4 z-50 space-y-2">
+        <div id="toast-container" class="toast-container" role="status" aria-live="polite">
           {% for category, message in messages %}
-            <div class="toast toast-{{ category }} flex items-center gap-2 px-4 py-3 rounded-lg shadow-lg text-sm font-medium">
+            <div class="toast toast--{{ 'success' if category == 'success' else 'error' if category == 'error' else 'info' }}">
               {% if category == 'success' %}
-                <svg class="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-                <span class="text-green-800">{{ message }}</span>
+                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
               {% else %}
-                <svg class="w-4 h-4 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-                <span class="text-red-800">{{ message }}</span>
+                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path stroke-linecap="round" d="M12 8v4m0 4h.01"/></svg>
               {% endif %}
+              <span>{{ message }}</span>
             </div>
           {% endfor %}
         </div>
-        <script>setTimeout(() => { const c = document.getElementById('toast-container'); if(c) c.remove(); }, 4000);</script>
+        <script>setTimeout(() => { const c = document.getElementById('toast-container'); if(c) { c.style.opacity='0'; c.style.transition='opacity 300ms'; setTimeout(()=>c.remove(), 320); }}, 3800);</script>
       {% endif %}
     {% endwith %}
 
-    <main class="flex-1 p-8">
+    <div class="page">
       {% block content %}{% endblock %}
-    </main>
-  </div>
+    </div>
 
-  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
-  <script>
-    // Poll review queue count and update sidebar badge
-    function updateReviewBadge() {
-      fetch('/api/review/count').then(r => r.json()).then(data => {
-        const badge = document.getElementById('nav-review-badge');
-        if (badge) {
-          if (data.count > 0) {
-            badge.textContent = data.count;
-            badge.classList.remove('hidden');
-          } else {
-            badge.classList.add('hidden');
-          }
-        }
-      }).catch(() => {});
-    }
-    updateReviewBadge();
-    setInterval(updateReviewBadge, 8000);
-  </script>
-  {% block scripts %}{% endblock %}
+  </main>
+
+</div>{# end .app-shell #}
+
+<div id="toast-container" class="toast-container" role="status" aria-live="polite"></div>
+<script src="{{ url_for('static', filename='js/app.js') }}"></script>
+{% block scripts %}{% endblock %}
+
 </body>
 </html>

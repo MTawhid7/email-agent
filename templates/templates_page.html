@@ -1,107 +1,125 @@
 {% extends "base.html" %}
+{% from 'components/macros.html' import page_header, empty_state, btn %}
 {% block title %}Templates — Email Agent{% endblock %}
 
 {% block content %}
-<div class="max-w-3xl">
-  <div class="flex items-center justify-between mb-6">
-    <h1 class="text-2xl font-semibold text-gray-900">Email Templates</h1>
-    <button onclick="document.getElementById('add-form').classList.toggle('hidden')"
-      class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">
-      + New Template
-    </button>
+<div class="flex-between page-header">
+  <div>
+    <h1 class="page-title">Templates</h1>
+    <p class="page-subtitle">Pre-written reply structures. The AI uses these as a guide when generating replies.</p>
   </div>
+  <button onclick="toggleAddForm()" class="btn btn-primary">
+    <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+    New Template
+  </button>
+</div>
 
-  <!-- Add template form -->
-  <div id="add-form" class="hidden bg-white rounded-2xl border border-gray-100 shadow-sm p-6 mb-6">
-    <h2 class="text-sm font-semibold text-gray-700 mb-4">New Template</h2>
-    <form method="POST" action="/templates" class="space-y-3">
-      <div class="grid grid-cols-2 gap-3">
-        <div>
-          <label class="block text-xs font-medium text-gray-600 mb-1">Name</label>
-          <input type="text" name="name" placeholder="e.g. Meeting decline" required
-            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+{# ── Add form ──────────────────────────────────────────────────────────────── #}
+<div id="add-form" style="display:none;margin-bottom:var(--sp-5);">
+  <div class="card card-lg">
+    <div class="card-section-title">New Template</div>
+    <form method="POST" action="/templates" style="display:flex;flex-direction:column;gap:var(--sp-3);">
+      <div class="grid-2">
+        <div class="field">
+          <label class="label label-required">Name</label>
+          <input type="text" name="name" placeholder="e.g. Meeting decline" required class="input">
         </div>
-        <div>
-          <label class="block text-xs font-medium text-gray-600 mb-1">Category</label>
-          <input type="text" name="category" placeholder="e.g. Meetings" list="cat-list"
-            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-          <datalist id="cat-list">
-            {% for cat in categories %}<option value="{{ cat }}">{% endfor %}
-          </datalist>
+        <div class="field">
+          <label class="label">Category</label>
+          <input type="text" name="category" placeholder="e.g. Meetings" list="cat-list" class="input">
+          <datalist id="cat-list">{% for cat in categories %}<option value="{{ cat }}">{% endfor %}</datalist>
         </div>
       </div>
-      <div>
-        <label class="block text-xs font-medium text-gray-600 mb-1">Body</label>
-        <textarea name="body" rows="4" required
-          placeholder="Thank you for reaching out. I've received your message…"
-          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"></textarea>
-        <p class="text-xs text-gray-400 mt-1">Use [brackets] for placeholders the AI will fill in.</p>
+      <div class="field">
+        <label class="label label-required">Body</label>
+        <textarea name="body" rows="4" required class="textarea"
+          placeholder="Thank you for reaching out. I've received your message…"></textarea>
+        <p class="hint">Use [brackets] for placeholders the AI will fill in.</p>
       </div>
-      <div class="flex gap-2">
-        <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">Save</button>
-        <button type="button" onclick="document.getElementById('add-form').classList.add('hidden')"
-          class="bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium px-4 py-2 rounded-lg transition-colors">Cancel</button>
+      <div style="display:flex;gap:var(--sp-2);">
+        {{ btn('Save Template', variant='primary', type='submit') }}
+        <button type="button" onclick="toggleAddForm()" class="btn btn-ghost">Cancel</button>
       </div>
     </form>
   </div>
+</div>
 
-  <!-- Template list grouped by category -->
+{# ── Template list ─────────────────────────────────────────────────────────── #}
+{% if templates %}
   {% for cat in categories %}
-  <div class="mb-6">
-    <h2 class="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">{{ cat }}</h2>
-    <div class="space-y-2">
-      {% for t in templates if t.category == cat %}
-      <div class="bg-white rounded-xl border border-gray-100 shadow-sm" id="card-{{ t.id }}">
-        <div class="flex items-center justify-between px-4 py-3 cursor-pointer"
-          onclick="toggleEdit('{{ t.id }}')">
-          <span class="text-sm font-medium text-gray-800">{{ t.name }}</span>
-          <span class="text-xs text-gray-400">edit ›</span>
-        </div>
-
-        <!-- Edit form (hidden by default) -->
-        <div id="edit-{{ t.id }}" class="hidden border-t border-gray-50 px-4 pb-4 pt-3">
-          <form method="POST" action="/templates/{{ t.id }}" class="space-y-3">
-            <div class="grid grid-cols-2 gap-3">
-              <div>
-                <label class="block text-xs font-medium text-gray-600 mb-1">Name</label>
-                <input type="text" name="name" value="{{ t.name }}" required
-                  class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+  <div style="margin-bottom:var(--sp-6);">
+    <div style="font-size:var(--text-xs);font-weight:500;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-tertiary);margin-bottom:var(--sp-3);">{{ cat }}</div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th style="width:200px;">Name</th>
+            <th>Body</th>
+            <th style="width:80px;"><span class="sr-only">Actions</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for t in templates if t.category == cat %}
+          <tr id="row-{{ t.id }}">
+            <td style="font-weight:500;color:var(--text-primary);vertical-align:top;padding-top:14px;">{{ t.name }}</td>
+            <td>
+              {# View mode #}
+              <div id="view-{{ t.id }}" style="color:var(--text-secondary);font-size:var(--text-sm);line-height:1.6;">{{ t.body }}</div>
+              {# Edit mode (hidden) #}
+              <form id="edit-{{ t.id }}" method="POST" action="/templates/{{ t.id }}" style="display:none;padding:var(--sp-2) 0;">
+                <div style="display:flex;flex-direction:column;gap:var(--sp-2);">
+                  <div class="grid-2">
+                    <input type="text" name="name" value="{{ t.name }}" required class="input">
+                    <input type="text" name="category" value="{{ t.category }}" list="cat-list" class="input">
+                  </div>
+                  <textarea name="body" rows="3" required class="textarea">{{ t.body }}</textarea>
+                  <div style="display:flex;gap:var(--sp-2);">
+                    {{ btn('Save', variant='primary', type='submit', size='sm') }}
+                    <button type="button" onclick="cancelEdit('{{ t.id }}')" class="btn btn-ghost btn-sm">Cancel</button>
+                  </div>
+                </div>
+              </form>
+            </td>
+            <td style="text-align:right;vertical-align:top;padding-top:12px;">
+              <div id="actions-{{ t.id }}" style="display:flex;gap:var(--sp-1);justify-content:flex-end;">
+                <button onclick="startEdit('{{ t.id }}')" class="btn btn-ghost btn-sm">Edit</button>
+                <form method="POST" action="/templates/{{ t.id }}/delete" style="display:inline;"
+                  onsubmit="return confirm('Delete template \'{{ t.name }}\'?')">
+                  <button type="submit" class="btn btn-ghost btn-sm" style="color:var(--status-error);">Delete</button>
+                </form>
               </div>
-              <div>
-                <label class="block text-xs font-medium text-gray-600 mb-1">Category</label>
-                <input type="text" name="category" value="{{ t.category }}" list="cat-list"
-                  class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-              </div>
-            </div>
-            <div>
-              <label class="block text-xs font-medium text-gray-600 mb-1">Body</label>
-              <textarea name="body" rows="3" required
-                class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none">{{ t.body }}</textarea>
-            </div>
-            <div class="flex gap-2">
-              <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-3 py-1.5 rounded-lg">Save</button>
-              <button type="button" onclick="toggleEdit('{{ t.id }}')"
-                class="bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium px-3 py-1.5 rounded-lg">Cancel</button>
-            </div>
-          </form>
-          <form method="POST" action="/templates/{{ t.id }}/delete" class="mt-2"
-            onsubmit="return confirm('Delete this template?')">
-            <button type="submit" class="text-xs text-red-500 hover:text-red-700">Delete template</button>
-          </form>
-        </div>
-      </div>
-      {% endfor %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
     </div>
   </div>
   {% endfor %}
-</div>
+
+{% else %}
+  <div class="card">
+    {{ empty_state('No templates yet', 'Create templates to give the AI reply structures to draw from.') }}
+  </div>
+{% endif %}
+
 {% endblock %}
 
 {% block scripts %}
 <script>
-function toggleEdit(id) {
-  const el = document.getElementById('edit-' + id);
-  el.classList.toggle('hidden');
+function toggleAddForm() {
+  const f = document.getElementById('add-form');
+  f.style.display = f.style.display === 'none' ? 'block' : 'none';
+}
+function startEdit(id) {
+  document.getElementById('view-' + id).style.display = 'none';
+  document.getElementById('edit-' + id).style.display = 'block';
+  document.getElementById('actions-' + id).style.display = 'none';
+}
+function cancelEdit(id) {
+  document.getElementById('view-' + id).style.display = 'block';
+  document.getElementById('edit-' + id).style.display = 'none';
+  document.getElementById('actions-' + id).style.display = 'flex';
 }
 </script>
 {% endblock %}

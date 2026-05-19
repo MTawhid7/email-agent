@@ -4,55 +4,54 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Setup — Email Agent</title>
-  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
-<body class="bg-gray-50 min-h-screen flex items-center justify-center">
-  <div class="w-full max-w-md">
+<body>
+<div class="wizard-shell">
+<div class="wizard-card">
 
-    <!-- Step indicator -->
-    <div class="flex items-center justify-center gap-2 mb-8">
-      {% for i in range(1, 5) %}
-        <div class="flex items-center gap-2">
-          <div class="w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold
-            {% if i == 2 %}bg-blue-600 text-white{% elif i < 2 %}bg-blue-200 text-blue-700{% else %}bg-gray-200 text-gray-500{% endif %}">
-            {% if i < 2 %}✓{% else %}{{ i }}{% endif %}
-          </div>
-          {% if i < 4 %}<div class="w-8 h-px {% if i < 2 %}bg-blue-300{% else %}bg-gray-300{% endif %}"></div>{% endif %}
+  <div class="wizard-header">
+    <div class="wizard-steps">
+      {% for i in range(1,5) %}
+        <div class="wizard-step {% if i < 2 %}wizard-step--done{% elif i == 2 %}wizard-step--active{% else %}wizard-step--pending{% endif %}">
+          {{ '✓' if i < 2 else i }}
         </div>
+        {% if i < 4 %}
+          <div class="wizard-connector {% if i < 2 %}wizard-connector--done{% endif %}"></div>
+        {% endif %}
       {% endfor %}
     </div>
+    <h1 class="wizard-title">Gmail Credentials</h1>
+    <p class="wizard-desc">Upload <code style="background:var(--bg-elevated);padding:1px 5px;border-radius:4px;font-size:0.8em;">credentials.json</code> from Google Cloud Console to authorize Gmail access.</p>
+  </div>
 
-    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
-      <h1 class="text-xl font-semibold text-gray-900 mb-1">Gmail Credentials</h1>
-      <p class="text-sm text-gray-500 mb-4">Upload the <code class="bg-gray-100 px-1 rounded">credentials.json</code> file from Google Cloud Console.</p>
-
-      <div class="mb-5 p-3 bg-blue-50 border border-blue-100 rounded-lg text-xs text-blue-700 space-y-1">
-        <p class="font-medium">How to get this file:</p>
-        <ol class="list-decimal list-inside space-y-0.5">
-          <li>Go to console.cloud.google.com</li>
-          <li>APIs &amp; Services → Credentials</li>
-          <li>Click your OAuth 2.0 Desktop client → Download JSON</li>
-          <li>Upload it below</li>
-        </ol>
-      </div>
-
-      {% if error %}
-        <div class="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">{{ error }}</div>
-      {% endif %}
-
-      <form method="POST" enctype="multipart/form-data" class="space-y-4">
-        <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">credentials.json</label>
-          <input type="file" name="credentials_file" accept=".json"
-            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" required>
-        </div>
-        <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg text-sm transition-colors">
-          Continue →
-        </button>
-      </form>
+  <div class="wizard-body">
+    <div style="background:var(--status-info-light);border:1px solid #bfdbfe;border-radius:var(--r-lg);padding:var(--sp-3) var(--sp-4);margin-bottom:var(--sp-4);font-size:var(--text-sm);color:#1e40af;">
+      <div style="font-weight:600;margin-bottom:4px;">How to get this file</div>
+      <ol style="list-style:decimal;padding-left:16px;display:flex;flex-direction:column;gap:2px;">
+        <li>Go to <strong>console.cloud.google.com</strong></li>
+        <li>APIs &amp; Services → Credentials</li>
+        <li>Click your OAuth 2.0 Desktop client → Download JSON</li>
+        <li>Upload it below</li>
+      </ol>
     </div>
 
-    <p class="text-center text-xs text-gray-400 mt-4">Step 2 of 4</p>
+    {% if error %}
+      <div class="alert alert-error" style="margin-bottom:var(--sp-4);">{{ error }}</div>
+    {% endif %}
+
+    <form method="POST" enctype="multipart/form-data" class="wizard-form">
+      <div class="field">
+        <label class="label label-required">credentials.json</label>
+        <input type="file" name="credentials_file" accept=".json" required
+          class="input" style="height:auto;padding:var(--sp-2) var(--sp-3);">
+      </div>
+      <button type="submit" class="btn btn-primary btn-lg" style="width:100%;">Continue →</button>
+    </form>
   </div>
+
+  <div class="wizard-footer">Step 2 of 4</div>
+</div>
+</div>
 </body>
 </html>

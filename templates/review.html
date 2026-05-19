@@ -1,91 +1,94 @@
 {% extends "base.html" %}
+{% from 'components/macros.html' import page_header, priority_badge, avatar, empty_state %}
 {% block title %}Review Queue — Email Agent{% endblock %}
 
 {% block content %}
-<div class="max-w-3xl">
-  <div class="flex items-center justify-between mb-6">
-    <h1 class="text-2xl font-semibold text-gray-900">Review Queue</h1>
-    <span class="text-sm text-gray-400">{{ items|length }} pending</span>
+<div class="flex-between page-header">
+  <div>
+    <h1 class="page-title">Review Queue</h1>
+    <p class="page-subtitle">Edit, send, or discard AI-generated replies before they reach Gmail.</p>
   </div>
+  <span style="font-size:var(--text-sm);color:var(--text-tertiary);">{{ items|length }} pending</span>
+</div>
 
-  {% if not items %}
-  <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-12 text-center text-gray-400">
-    <p class="text-sm">No replies waiting for review.</p>
-    <p class="text-xs mt-1">Start the agent on the Dashboard to generate replies.</p>
+{% if not items %}
+  <div class="card">
+    {{ empty_state(
+      'All caught up',
+      'No replies waiting for review. Start the agent on the Dashboard — generated replies will appear here.',
+      'Go to Dashboard',
+      '/dashboard'
+    ) }}
   </div>
-  {% endif %}
+{% endif %}
 
-  {% for item in items %}
-  <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 mb-4">
-    <!-- Header -->
-    <div class="flex items-start justify-between mb-3">
-      <div>
-        <div class="flex items-center gap-2">
-          {% if item.priority == 'high' %}<span class="text-base">🔴</span>
-          {% elif item.priority == 'low' %}<span class="text-base">⚪</span>
-          {% else %}<span class="text-base">🟡</span>{% endif %}
-          <p class="font-medium text-gray-900">{{ item.sender_name }}</p>
-          <span class="text-xs text-gray-400">{{ item.sender_email }}</span>
+<div style="display:flex;flex-direction:column;gap:var(--sp-4);">
+{% for item in items %}
+<article class="review-card review-card--{{ item.priority }}" id="card-{{ item.id }}">
+
+  {# Header #}
+  <div class="review-card-header">
+    <div style="display:flex;align-items:center;gap:var(--sp-3);min-width:0;">
+      {{ avatar(item.sender_name) }}
+      <div style="min-width:0;">
+        <div style="display:flex;align-items:center;gap:var(--sp-2);">
+          <span style="font-size:var(--text-md);font-weight:600;color:var(--text-primary);">{{ item.sender_name }}</span>
+          {{ priority_badge(item.priority) }}
         </div>
-        <p class="text-sm text-gray-600 mt-0.5 ml-7">{{ item.subject }}</p>
+        <div style="font-size:var(--text-sm);color:var(--text-secondary);margin-top:1px;" class="truncate">{{ item.subject }}</div>
         {% if item.summary %}
-        <p class="text-xs text-gray-400 mt-0.5 ml-7 italic">{{ item.summary }}</p>
+          <div style="font-size:var(--text-sm);color:var(--text-tertiary);font-style:italic;margin-top:1px;" class="truncate">{{ item.summary }}</div>
         {% endif %}
       </div>
-      <span class="text-xs text-gray-300 shrink-0 ml-4">{{ item.created_at[:16] | replace('T',' ') }}</span>
     </div>
-
-    <!-- Editable reply body -->
-    <div class="border border-gray-200 rounded-lg overflow-hidden mb-4">
-      <div class="bg-gray-50 px-3 py-1.5 text-xs text-gray-400 border-b border-gray-200">
-        Reply — click to edit
-      </div>
-      <div
-        id="body-{{ item.id }}"
-        contenteditable="true"
-        class="p-4 text-sm text-gray-700 min-h-24 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-400"
-      >{{ item.body_html | safe }}</div>
-    </div>
-
-    <!-- Action buttons — three separate mini-forms sharing the editable body -->
-    <div class="flex gap-2">
-      <form method="POST" action="/review/{{ item.id }}/send" onsubmit="captureBody(this, '{{ item.id }}')">
-        <input type="hidden" name="body_html" id="send-body-{{ item.id }}">
-        <button type="submit"
-          class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors">
-          Send Now
-        </button>
-      </form>
-      <form method="POST" action="/review/{{ item.id }}/draft" onsubmit="captureBody(this, '{{ item.id }}')">
-        <input type="hidden" name="body_html" id="draft-body-{{ item.id }}">
-        <button type="submit"
-          class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium rounded-lg transition-colors">
-          Save as Draft
-        </button>
-      </form>
-      <form method="POST" action="/review/{{ item.id }}/discard">
-        <button type="submit"
-          class="px-4 py-2 bg-red-50 hover:bg-red-100 text-red-600 text-sm font-medium rounded-lg transition-colors">
-          Discard
-        </button>
-      </form>
-    </div>
+    <time style="font-size:var(--text-xs);color:var(--text-tertiary);white-space:nowrap;margin-left:var(--sp-4);">
+      {{ item.created_at[:16]|replace('T',' ') }}
+    </time>
   </div>
-  {% endfor %}
-</div>
-{% endblock %}
 
-{% block scripts %}
-<script>
-function captureBody(form, itemId) {
-  const editable = document.getElementById('body-' + itemId);
-  const action = form.action;
-  // Determine which hidden field to fill based on the form action
-  const prefix = action.includes('/send') ? 'send' : 'draft';
-  const hidden = document.getElementById(prefix + '-body-' + itemId);
-  if (hidden && editable) {
-    hidden.value = editable.innerHTML;
-  }
-}
-</script>
+  {# Editable reply body #}
+  <div class="review-body">
+    <div
+      id="body-{{ item.id }}"
+      class="editable-body"
+      contenteditable="true"
+      role="textbox"
+      aria-multiline="true"
+      aria-label="Reply body for {{ item.sender_name }}"
+    >{{ item.body_html | safe }}</div>
+  </div>
+
+  {# Actions #}
+  <div class="review-actions">
+    <form method="POST" action="/review/{{ item.id }}/send"
+      onsubmit="captureEditableBody(this, '{{ item.id }}')">
+      <input type="hidden" name="body_html">
+      <button type="submit" class="btn btn-primary btn-sm">
+        <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5"/></svg>
+        Send Now
+      </button>
+    </form>
+
+    <form method="POST" action="/review/{{ item.id }}/draft"
+      onsubmit="captureEditableBody(this, '{{ item.id }}')">
+      <input type="hidden" name="body_html">
+      <button type="submit" class="btn btn-secondary btn-sm">
+        <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M17 3a2.828 2.828 0 114 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
+        Save as Draft
+      </button>
+    </form>
+
+    <form method="POST" action="/review/{{ item.id }}/discard"
+      onsubmit="return confirm('Discard this reply for {{ item.sender_name }}? This cannot be undone.')">
+      <button type="submit" class="btn btn-danger btn-sm">
+        <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+        Discard
+      </button>
+    </form>
+  </div>
+
+</article>
+{% endfor %}
+</div>
+
 {% endblock %}

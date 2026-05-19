@@ -1,0 +1,172 @@
+{# ─────────────────────────────────────────────────────────────────────────────
+   Email Agent — Jinja2 Component Macros
+   Single source of truth for every reusable UI element.
+   Import with: {% from 'components/macros.html' import btn, input_field, ... %}
+   ───────────────────────────────────────────────────────────────────────────── #}
+
+{# ── Buttons ──────────────────────────────────────────────────────────────── #}
+
+{% macro btn(label, variant='primary', size='', type='button', href=None, cls='', attrs='') %}
+  {% set sz = 'btn-' + size if size else '' %}
+  {% if href %}
+    <a href="{{ href }}" class="btn btn-{{ variant }} {{ sz }} {{ cls }}" {{ attrs|safe }}>{{ label }}</a>
+  {% else %}
+    <button type="{{ type }}" class="btn btn-{{ variant }} {{ sz }} {{ cls }}" {{ attrs|safe }}>{{ label }}</button>
+  {% endif %}
+{% endmacro %}
+
+{% macro icon_btn(label, variant='ghost', size='sm', type='button', cls='', attrs='') %}
+  <button type="{{ type }}" class="btn btn-{{ variant }} btn-{{ size }} {{ cls }}" aria-label="{{ label }}" {{ attrs|safe }}>
+    {{ caller() }}
+  </button>
+{% endmacro %}
+
+{# ── Form fields ──────────────────────────────────────────────────────────── #}
+
+{% macro input_field(name, label='', type='text', value='', placeholder='', required=False, hint='', cls='') %}
+  <div class="field">
+    {% if label %}
+      <label for="field-{{ name }}" class="label {% if required %}label-required{% endif %}">{{ label }}</label>
+    {% endif %}
+    <input
+      id="field-{{ name }}"
+      type="{{ type }}"
+      name="{{ name }}"
+      value="{{ value }}"
+      placeholder="{{ placeholder }}"
+      class="input {{ cls }}"
+      {% if required %}required{% endif %}
+    >
+    {% if hint %}<p class="hint">{{ hint }}</p>{% endif %}
+  </div>
+{% endmacro %}
+
+{% macro textarea_field(name, label='', value='', placeholder='', rows=4, required=False, hint='', cls='') %}
+  <div class="field">
+    {% if label %}
+      <label for="field-{{ name }}" class="label {% if required %}label-required{% endif %}">{{ label }}</label>
+    {% endif %}
+    <textarea
+      id="field-{{ name }}"
+      name="{{ name }}"
+      rows="{{ rows }}"
+      placeholder="{{ placeholder }}"
+      class="textarea {{ cls }}"
+      {% if required %}required{% endif %}
+    >{{ value }}</textarea>
+    {% if hint %}<p class="hint">{{ hint }}</p>{% endif %}
+  </div>
+{% endmacro %}
+
+{% macro select_field(name, label='', options=[], selected='', required=False, cls='') %}
+  <div class="field">
+    {% if label %}
+      <label for="field-{{ name }}" class="label {% if required %}label-required{% endif %}">{{ label }}</label>
+    {% endif %}
+    <select id="field-{{ name }}" name="{{ name }}" class="select {{ cls }}" {% if required %}required{% endif %}>
+      {% for opt in options %}
+        <option value="{{ opt.value }}" {% if opt.value == selected %}selected{% endif %}>{{ opt.label }}</option>
+      {% endfor %}
+    </select>
+  </div>
+{% endmacro %}
+
+{% macro toggle_field(name, label='', description='', checked=False) %}
+  <label class="toggle-wrap">
+    <div>
+      <div class="toggle-info-title">{{ label }}</div>
+      {% if description %}<div class="toggle-info-desc">{{ description }}</div>{% endif %}
+    </div>
+    <div class="toggle">
+      <input type="checkbox" name="{{ name }}" value="true" {% if checked %}checked{% endif %}>
+      <div class="toggle-track"></div>
+      <div class="toggle-thumb"></div>
+    </div>
+  </label>
+{% endmacro %}
+
+{# ── Cards ────────────────────────────────────────────────────────────────── #}
+
+{% macro card(cls='') %}
+  <div class="card {{ cls }}">{{ caller() }}</div>
+{% endmacro %}
+
+{% macro card_section(title='') %}
+  <div class="card-section">
+    {% if title %}<div class="card-section-title">{{ title }}</div>{% endif %}
+    {{ caller() }}
+  </div>
+{% endmacro %}
+
+{# ── Badges ───────────────────────────────────────────────────────────────── #}
+
+{% macro badge(text, color='gray') %}
+  <span class="badge badge-{{ color }}">{{ text }}</span>
+{% endmacro %}
+
+{% macro priority_badge(priority) %}
+  {% set cfg = {
+    'high':   ('🔴', 'High',   'red'),
+    'normal': ('🟡', 'Normal', 'amber'),
+    'low':    ('⚪', 'Low',    'gray'),
+    'skip':   ('⏭', 'Skipped','gray'),
+  } %}
+  {% set emoji, label, color = cfg.get(priority, ('🟡','Normal','amber')) %}
+  <span class="badge badge-{{ color }}">{{ emoji }} {{ label }}</span>
+{% endmacro %}
+
+{# ── Alert ────────────────────────────────────────────────────────────────── #}
+
+{% macro alert(message, type='error') %}
+  {% if message %}
+    <div class="alert alert-{{ type }}" role="alert">
+      {% if type == 'error' %}
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path stroke-linecap="round" d="M12 8v4m0 4h.01"/></svg>
+      {% elif type == 'success' %}
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+      {% endif %}
+      <span>{{ message }}</span>
+    </div>
+  {% endif %}
+{% endmacro %}
+
+{# ── Empty state ──────────────────────────────────────────────────────────── #}
+
+{% macro empty_state(title, description='', action_label='', action_href='') %}
+  <div class="empty-state">
+    <svg class="empty-icon" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" aria-hidden="true">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 9.776c.112-.017.227-.026.344-.026h15.812c.117 0 .232.009.344.026m-16.5 0a2.25 2.25 0 00-1.883 2.542l.857 6a2.25 2.25 0 002.227 1.932H19.05a2.25 2.25 0 002.227-1.932l.857-6a2.25 2.25 0 00-1.883-2.542m-16.5 0V6A2.25 2.25 0 016 3.75h3.879a1.5 1.5 0 011.06.44l2.122 2.12a1.5 1.5 0 001.06.44H18A2.25 2.25 0 0120.25 9v.776"/>
+    </svg>
+    <p class="empty-title">{{ title }}</p>
+    {% if description %}<p class="empty-desc">{{ description }}</p>{% endif %}
+    {% if action_label and action_href %}
+      <a href="{{ action_href }}" class="btn btn-primary">{{ action_label }}</a>
+    {% endif %}
+  </div>
+{% endmacro %}
+
+{# ── Stat card ────────────────────────────────────────────────────────────── #}
+
+{% macro stat_card(label, value, delta='') %}
+  <div class="stat-card">
+    <div class="stat-label">{{ label }}</div>
+    <div class="stat-value">{{ value }}</div>
+    {% if delta %}<div class="stat-delta">{{ delta }}</div>{% endif %}
+  </div>
+{% endmacro %}
+
+{# ── Page header ──────────────────────────────────────────────────────────── #}
+
+{% macro page_header(title, subtitle='') %}
+  <div class="page-header">
+    <h1 class="page-title">{{ title }}</h1>
+    {% if subtitle %}<p class="page-subtitle">{{ subtitle }}</p>{% endif %}
+  </div>
+{% endmacro %}
+
+{# ── Sender avatar (initials) ─────────────────────────────────────────────── #}
+
+{% macro avatar(name, size=32) %}
+  {% set initials = (name.split()[0][0] + (name.split()[1][0] if name.split()|length > 1 else name.split()[0][1])) | upper if name else '?' %}
+  <div class="sender-avatar" style="width:{{ size }}px;height:{{ size }}px;" aria-hidden="true">{{ initials }}</div>
+{% endmacro %}

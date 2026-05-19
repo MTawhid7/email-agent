@@ -1,183 +1,172 @@
 {% extends "base.html" %}
+{% from 'components/macros.html' import page_header, alert, btn %}
 {% block title %}Bulk Send — Email Agent{% endblock %}
 
 {% block content %}
-<div class="max-w-2xl">
-  <h1 class="text-2xl font-semibold text-gray-900 mb-6">Bulk Send</h1>
+{{ page_header('Bulk Send', 'Generate personalized email drafts for multiple recipients at once.') }}
 
-  {% if not job_id %}
-  <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 mb-6">
+{% if not job_id %}
+<div class="card card-lg" style="max-width:640px;">
 
-    {% if error %}
-      <div class="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">{{ error }}</div>
-    {% endif %}
+  {# Tabs #}
+  <div class="tabs" id="bulk-tabs">
+    <button class="tab active" onclick="switchTab('manual')" id="tab-manual">Enter manually</button>
+    <button class="tab" onclick="switchTab('csv')" id="tab-csv">Upload CSV</button>
+  </div>
 
-    <!-- Tab switcher -->
-    <div class="flex border-b border-gray-100 mb-5">
-      <button id="tab-manual" onclick="switchTab('manual')"
-        class="tab-btn px-4 py-2 text-sm font-medium border-b-2 border-blue-600 text-blue-700 -mb-px">
-        Enter manually
-      </button>
-      <button id="tab-csv" onclick="switchTab('csv')"
-        class="tab-btn px-4 py-2 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700 -mb-px">
-        Upload CSV
-      </button>
-    </div>
+  {% if error %}{{ alert(error, 'error') }}{% endif %}
 
-    <!-- ── Manual entry form ──────────────────────────────────────────────── -->
-    <div id="panel-manual">
-      <form method="POST" id="form-manual" class="space-y-4">
-        <input type="hidden" name="input_mode" value="manual">
+  {# ── Manual entry panel ──────────────────────────────────────────────── #}
+  <div id="panel-manual">
+    <form method="POST" id="form-manual" style="display:flex;flex-direction:column;gap:var(--sp-4);">
+      <input type="hidden" name="input_mode" value="manual">
 
-        <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Email Intent</label>
-          <textarea name="intent" rows="2"
-            placeholder="e.g. Follow up on our Q2 proposal and introduce the new pricing options"
-            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" required></textarea>
+      <div class="field">
+        <label class="label label-required">Email Intent</label>
+        <textarea name="intent" rows="2" required class="textarea"
+          placeholder="e.g. Follow up on our Q2 proposal and introduce the new pricing options"></textarea>
+        <p class="hint">What the email should communicate — used as subject and the AI's main instruction.</p>
+      </div>
+
+      <div class="field">
+        <div class="label">Recipients</div>
+        <div style="display:grid;grid-template-columns:1fr 1.5fr 1fr auto;gap:var(--sp-2);margin-bottom:var(--sp-2);padding:0 2px;">
+          <div style="font-size:var(--text-xs);font-weight:500;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-tertiary);">Name</div>
+          <div style="font-size:var(--text-xs);font-weight:500;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-tertiary);">Email</div>
+          <div style="font-size:var(--text-xs);font-weight:500;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-tertiary);">Notes (optional)</div>
+          <div></div>
         </div>
-
-        <!-- Recipient rows -->
-        <div>
-          <label class="block text-sm font-medium text-gray-700 mb-2">Recipients</label>
-          <div id="recipients-container" class="space-y-2">
-            <!-- Header -->
-            <div class="grid grid-cols-12 gap-2 text-xs font-medium text-gray-400 px-1">
-              <span class="col-span-4">Full Name</span>
-              <span class="col-span-5">Email</span>
-              <span class="col-span-3">Notes (optional)</span>
-            </div>
-            <!-- Initial row -->
-            <div class="recipient-row grid grid-cols-12 gap-2 items-center">
-              <input type="text" name="r_name_0" placeholder="Alice Johnson"
-                class="col-span-4 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-              <input type="email" name="r_email_0" placeholder="alice@example.com" required
-                class="col-span-5 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-              <input type="text" name="r_notes_0" placeholder="Brief context…"
-                class="col-span-2 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-              <button type="button" onclick="removeRow(this)" class="col-span-1 text-gray-300 hover:text-red-400 text-lg text-center">×</button>
-            </div>
+        <div id="recipients-container" style="display:flex;flex-direction:column;gap:var(--sp-2);">
+          <div class="recipient-row" style="display:grid;grid-template-columns:1fr 1.5fr 1fr auto;gap:var(--sp-2);align-items:center;">
+            <input type="text" name="r_name_0" placeholder="Alice Johnson" class="input">
+            <input type="email" name="r_email_0" placeholder="alice@example.com" class="input" required>
+            <input type="text" name="r_notes_0" placeholder="Context…" class="input">
+            <button type="button" onclick="removeRecipient(this)"
+              style="width:32px;height:32px;display:flex;align-items:center;justify-content:center;border:none;background:none;color:var(--text-tertiary);cursor:pointer;font-size:18px;border-radius:var(--r-sm);"
+              aria-label="Remove row">×</button>
           </div>
-          <button type="button" onclick="addRow()"
-            class="mt-2 text-xs text-blue-600 hover:underline">+ Add recipient</button>
         </div>
-
-        <button type="submit"
-          class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg text-sm transition-colors">
-          Generate Drafts
+        <button type="button" onclick="addRecipient()"
+          style="margin-top:var(--sp-2);font-size:var(--text-sm);color:var(--accent);background:none;border:none;cursor:pointer;font-family:var(--font);">
+          + Add recipient
         </button>
-      </form>
-    </div>
-
-    <!-- ── CSV upload form ────────────────────────────────────────────────── -->
-    <div id="panel-csv" class="hidden">
-      <form method="POST" enctype="multipart/form-data" class="space-y-4">
-        <input type="hidden" name="input_mode" value="csv">
-        <p class="text-sm text-gray-500">Upload a CSV with columns <code class="bg-gray-100 px-1 rounded">name, email, notes</code>.</p>
-        <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Recipients CSV</label>
-          <input type="file" name="csv_file" accept=".csv" required
-            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-        </div>
-        <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Email Intent</label>
-          <textarea name="intent" rows="2"
-            placeholder="e.g. Follow up on our Q2 proposal and introduce the new pricing options"
-            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" required></textarea>
-        </div>
-        <button type="submit"
-          class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg text-sm transition-colors">
-          Generate Drafts
-        </button>
-      </form>
-    </div>
-  </div>
-  {% endif %}
-
-  <!-- ── Progress panel ──────────────────────────────────────────────────── -->
-  {% if job_id %}
-  <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-    <h2 class="text-sm font-semibold text-gray-700 mb-4">Generating Drafts…</h2>
-    <div class="mb-4">
-      <div class="flex justify-between text-xs text-gray-500 mb-1">
-        <span id="progress-text">Starting…</span>
-        <span id="progress-pct">0%</span>
       </div>
-      <div class="w-full bg-gray-100 rounded-full h-2">
-        <div id="progress-bar" class="bg-blue-600 h-2 rounded-full transition-all" style="width:0%"></div>
-      </div>
-    </div>
-    <div id="job-log" class="space-y-1 max-h-72 overflow-y-auto font-mono text-xs"></div>
-    <div id="done-banner" class="hidden mt-4 p-3 bg-green-50 border border-green-200 rounded-lg text-sm text-green-700">
-      All done! Open Gmail → Drafts to review and send.
-      <a href="/bulk" class="underline ml-2">Start another batch</a>
-    </div>
+
+      {{ btn('Generate Drafts', variant='primary', type='submit', cls='btn-lg', attrs='style="width:100%;"') }}
+    </form>
   </div>
 
-  <script>
-    const jobId = "{{ job_id }}";
-    function pollJob() {
-      fetch('/api/bulk/status/' + jobId)
-        .then(r => r.json())
-        .then(data => {
-          const total = data.total || 0;
-          const done = (data.done || 0) + (data.failed || 0);
-          const pct = total > 0 ? Math.round(done / total * 100) : 0;
-          document.getElementById('progress-bar').style.width = pct + '%';
-          document.getElementById('progress-pct').textContent = pct + '%';
-          document.getElementById('progress-text').textContent = total > 0 ? `${done} of ${total} processed` : 'Working…';
-          const logEl = document.getElementById('job-log');
-          logEl.innerHTML = '';
-          (data.log || []).forEach(entry => {
-            const div = document.createElement('div');
-            div.className = 'py-0.5 ' + (entry.level === 'success' ? 'text-green-700' : 'text-red-600');
-            div.textContent = entry.message;
-            logEl.appendChild(div);
-          });
-          logEl.scrollTop = logEl.scrollHeight;
-          if (data.finished) document.getElementById('done-banner').classList.remove('hidden');
-          else setTimeout(pollJob, 2000);
-        })
-        .catch(() => setTimeout(pollJob, 3000));
-    }
-    pollJob();
-  </script>
-  {% endif %}
+  {# ── CSV upload panel ────────────────────────────────────────────────── #}
+  <div id="panel-csv" style="display:none;">
+    <form method="POST" enctype="multipart/form-data" style="display:flex;flex-direction:column;gap:var(--sp-4);">
+      <input type="hidden" name="input_mode" value="csv">
+      <p style="font-size:var(--text-md);color:var(--text-secondary);">Upload a CSV with columns <code style="background:var(--bg-elevated);padding:1px 5px;border-radius:4px;">name, email, notes</code>.</p>
+
+      <div class="field">
+        <label class="label label-required">Recipients CSV</label>
+        <input type="file" name="csv_file" accept=".csv" required class="input" style="height:auto;padding:var(--sp-2) var(--sp-3);">
+      </div>
+      <div class="field">
+        <label class="label label-required">Email Intent</label>
+        <textarea name="intent" rows="2" required class="textarea"
+          placeholder="e.g. Follow up on our Q2 proposal…"></textarea>
+      </div>
+      {{ btn('Generate Drafts', variant='primary', type='submit', cls='btn-lg', attrs='style="width:100%;"') }}
+    </form>
+  </div>
+
 </div>
+{% endif %}
+
+{# ── Progress panel ────────────────────────────────────────────────────────── #}
+{% if job_id %}
+<div class="card card-lg" style="max-width:640px;">
+  <div style="font-size:var(--text-lg);font-weight:600;color:var(--text-primary);margin-bottom:var(--sp-5);">Generating Drafts</div>
+
+  <div style="margin-bottom:var(--sp-4);">
+    <div style="display:flex;justify-content:space-between;font-size:var(--text-sm);color:var(--text-secondary);margin-bottom:var(--sp-2);">
+      <span id="progress-text">Starting…</span>
+      <span id="progress-pct" style="font-variant-numeric:tabular-nums;">0%</span>
+    </div>
+    <div style="height:6px;background:var(--bg-elevated);border-radius:var(--r-full);overflow:hidden;">
+      <div id="progress-bar" style="height:100%;background:var(--accent);border-radius:var(--r-full);width:0%;transition:width var(--dur-base) var(--ease);"></div>
+    </div>
+  </div>
+
+  <div id="job-log" style="display:flex;flex-direction:column;gap:2px;max-height:280px;overflow-y:auto;font-size:var(--text-sm);"></div>
+
+  <div id="done-banner" style="display:none;margin-top:var(--sp-4);">
+    <div class="alert alert-success">
+      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+      <span>All done! Open Gmail → Drafts to review and send. <a href="/bulk" style="color:inherit;font-weight:600;margin-left:8px;">Start another batch →</a></span>
+    </div>
+  </div>
+</div>
+
+<script>
+(function pollJob() {
+  const jobId = {{ job_id | tojson }};
+  fetch('/api/bulk/status/' + jobId)
+    .then(r => r.json())
+    .then(data => {
+      const total = data.total || 0;
+      const done = (data.done || 0) + (data.failed || 0);
+      const pct = total > 0 ? Math.round(done / total * 100) : 0;
+      document.getElementById('progress-bar').style.width = pct + '%';
+      document.getElementById('progress-pct').textContent = pct + '%';
+      document.getElementById('progress-text').textContent = total > 0 ? `${done} of ${total} processed` : 'Working…';
+      const log = document.getElementById('job-log');
+      log.innerHTML = '';
+      (data.log || []).forEach(e => {
+        const d = document.createElement('div');
+        d.style.cssText = 'padding:3px 0;';
+        d.style.color = e.level === 'success' ? '#065f46' : '#9a3412';
+        d.textContent = e.message;
+        log.appendChild(d);
+      });
+      log.scrollTop = log.scrollHeight;
+      if (data.finished) document.getElementById('done-banner').style.display = 'block';
+      else setTimeout(pollJob, 2000);
+    })
+    .catch(() => setTimeout(pollJob, 3000));
+})();
+</script>
+{% endif %}
+
 {% endblock %}
 
 {% block scripts %}
 <script>
-  function switchTab(tab) {
-    document.getElementById('panel-manual').classList.toggle('hidden', tab !== 'manual');
-    document.getElementById('panel-csv').classList.toggle('hidden', tab !== 'csv');
-    document.getElementById('tab-manual').className = 'tab-btn px-4 py-2 text-sm font-medium border-b-2 -mb-px ' +
-      (tab === 'manual' ? 'border-blue-600 text-blue-700' : 'border-transparent text-gray-500 hover:text-gray-700');
-    document.getElementById('tab-csv').className = 'tab-btn px-4 py-2 text-sm font-medium border-b-2 -mb-px ' +
-      (tab === 'csv' ? 'border-blue-600 text-blue-700' : 'border-transparent text-gray-500 hover:text-gray-700');
-  }
+let recipientCount = 1;
 
-  let rowCount = 1;
+function switchTab(tab) {
+  const isManual = tab === 'manual';
+  document.getElementById('panel-manual').style.display = isManual ? 'block' : 'none';
+  document.getElementById('panel-csv').style.display   = isManual ? 'none'  : 'block';
+  document.getElementById('tab-manual').className = 'tab' + (isManual  ? ' active' : '');
+  document.getElementById('tab-csv').className    = 'tab' + (!isManual ? ' active' : '');
+}
 
-  function addRow() {
-    const container = document.getElementById('recipients-container');
-    const i = rowCount++;
-    const row = document.createElement('div');
-    row.className = 'recipient-row grid grid-cols-12 gap-2 items-center';
-    row.innerHTML = `
-      <input type="text" name="r_name_${i}" placeholder="Full Name"
-        class="col-span-4 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-      <input type="email" name="r_email_${i}" placeholder="email@example.com"
-        class="col-span-5 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-      <input type="text" name="r_notes_${i}" placeholder="Brief context…"
-        class="col-span-2 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-      <button type="button" onclick="removeRow(this)" class="col-span-1 text-gray-300 hover:text-red-400 text-lg text-center">×</button>`;
-    container.appendChild(row);
-    row.querySelector('input[type="email"]').focus();
-  }
+function addRecipient() {
+  const c = document.getElementById('recipients-container');
+  const i = recipientCount++;
+  const row = document.createElement('div');
+  row.className = 'recipient-row';
+  row.style.cssText = 'display:grid;grid-template-columns:1fr 1.5fr 1fr auto;gap:8px;align-items:center;';
+  row.innerHTML = `
+    <input type="text" name="r_name_${i}" placeholder="Full Name" class="input">
+    <input type="email" name="r_email_${i}" placeholder="email@example.com" class="input">
+    <input type="text" name="r_notes_${i}" placeholder="Context…" class="input">
+    <button type="button" onclick="removeRecipient(this)"
+      style="width:32px;height:32px;display:flex;align-items:center;justify-content:center;border:none;background:none;color:var(--text-tertiary);cursor:pointer;font-size:18px;border-radius:4px;"
+      aria-label="Remove row">×</button>`;
+  c.appendChild(row);
+  row.querySelector('input[type="email"]').focus();
+}
 
-  function removeRow(btn) {
-    const rows = document.querySelectorAll('.recipient-row');
-    if (rows.length > 1) btn.closest('.recipient-row').remove();
-  }
+function removeRecipient(btn) {
+  const rows = document.querySelectorAll('.recipient-row');
+  if (rows.length > 1) btn.closest('.recipient-row').remove();
+}
 </script>
 {% endblock %}

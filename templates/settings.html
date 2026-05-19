@@ -1,141 +1,100 @@
 {% extends "base.html" %}
+{% from 'components/macros.html' import page_header, input_field, textarea_field, toggle_field, alert, btn %}
 {% block title %}Settings — Email Agent{% endblock %}
 
 {% block content %}
-<div class="max-w-2xl">
-  <h1 class="text-2xl font-semibold text-gray-900 mb-6">Settings</h1>
+{{ page_header('Settings', 'Configure your AI persona, signature, and preferences.') }}
 
-  <form method="POST" class="space-y-6">
+<form method="POST" style="display:flex;flex-direction:column;gap:var(--sp-5);max-width:680px;">
 
-    <!-- AI section -->
-    <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-      <h2 class="text-sm font-semibold text-gray-700 mb-4">AI Configuration</h2>
-      <div class="space-y-4">
-        <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Gemini API Key</label>
-          <input type="password" name="gemini_api_key" value="{{ config.get('gemini_api_key','') }}"
-            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" required>
-        </div>
-        <div class="grid grid-cols-2 gap-4">
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Model</label>
-            <input type="text" name="gemini_model" value="{{ config.get('gemini_model','gemini-3.1-flash-lite') }}"
-              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Poll interval (seconds)</label>
-            <input type="number" name="poll_interval_seconds" value="{{ config.get('poll_interval_seconds', 300) }}" min="60"
-              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-          </div>
-        </div>
-        <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-          <div>
-            <p class="text-sm font-medium text-gray-700">Auto-translate replies</p>
-            <p class="text-xs text-gray-400">Detect the incoming email's language and reply in the same language.</p>
-          </div>
-          <label class="relative inline-flex items-center cursor-pointer">
-            <input type="checkbox" name="auto_translate" value="true" class="sr-only peer"
-              {% if config.get('auto_translate') %}checked{% endif %}>
-            <div class="w-10 h-5 bg-gray-200 peer-focus:ring-2 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-5 peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
-          </label>
-        </div>
-        <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Persona Instructions</label>
-          <textarea name="persona_prompt" rows="4"
-            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" required>{{ config.get('persona_prompt','') }}</textarea>
-        </div>
+  {# ── AI Configuration ──────────────────────────────────────────────────── #}
+  <div class="card card-lg">
+    <div class="card-section-title">AI Configuration</div>
+
+    <div style="display:flex;flex-direction:column;gap:var(--sp-4);">
+      {{ input_field('gemini_api_key', 'Gemini API Key', type='password',
+          value=config.get('gemini_api_key',''),
+          placeholder='AIzaSy…', required=True) }}
+
+      <div class="grid-2">
+        {{ input_field('gemini_model', 'Model',
+            value=config.get('gemini_model','gemini-3.1-flash-lite'),
+            required=True) }}
+        {{ input_field('poll_interval_seconds', 'Poll interval (seconds)', type='number',
+            value=config.get('poll_interval_seconds', 300)|string) }}
       </div>
+
+      {{ toggle_field('auto_translate', 'Auto-translate replies',
+          'Detect the incoming email\'s language and reply in the same language.',
+          checked=config.get('auto_translate', False)) }}
+
+      {{ textarea_field('persona_prompt', 'Persona Instructions',
+          value=config.get('persona_prompt',''),
+          placeholder='You are [Name], a [role] at [Company]. Reply concisely and warmly…',
+          rows=4, required=True,
+          hint='Describe how the AI should write on your behalf. The more specific, the better.') }}
     </div>
+  </div>
 
-    <!-- Signature section -->
-    <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-      <h2 class="text-sm font-semibold text-gray-700 mb-4">Email Signature</h2>
-      <div class="grid grid-cols-2 gap-4">
-        <div class="col-span-2">
-          <label class="block text-sm font-medium text-gray-700 mb-1">Full Name <span class="text-red-500">*</span></label>
-          <input type="text" name="signature_name" value="{{ config.get('signature_name','') }}"
-            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" required>
-        </div>
-        <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Job Title</label>
-          <input type="text" name="signature_title" value="{{ config.get('signature_title','') }}"
-            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-        </div>
-        <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Company</label>
-          <input type="text" name="signature_company" value="{{ config.get('signature_company','') }}"
-            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-        </div>
-        <div class="col-span-2">
-          <label class="block text-sm font-medium text-gray-700 mb-1">Phone</label>
-          <input type="text" name="signature_phone" value="{{ config.get('signature_phone','') }}"
-            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-        </div>
+  {# ── Signature ─────────────────────────────────────────────────────────── #}
+  <div class="card card-lg">
+    <div class="card-section-title">Email Signature</div>
 
-        <!-- Dynamic social links -->
-        <div class="col-span-2">
-          <label class="block text-sm font-medium text-gray-700 mb-2">Social & Website Links</label>
+    <div style="display:flex;flex-direction:column;gap:var(--sp-4);">
+      {{ input_field('signature_name', 'Full Name',
+          value=config.get('signature_name',''),
+          placeholder='Jane Doe', required=True) }}
 
-          <!-- Quick-add presets -->
-          <div class="flex flex-wrap gap-2 mb-3">
-            {% for preset in [('LinkedIn','https://linkedin.com/in/'), ('WhatsApp','https://wa.me/'), ('Instagram','https://instagram.com/'), ('Website','https://'), ('Facebook','https://facebook.com/'), ('Twitter','https://twitter.com/')] %}
-            <button type="button" onclick="addLink('{{ preset[0] }}', '{{ preset[1] }}')"
-              class="text-xs px-3 py-1 rounded-full border border-gray-200 bg-gray-50 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700 transition-colors">
-              + {{ preset[0] }}
-            </button>
-            {% endfor %}
-          </div>
-
-          <div id="links-container" class="space-y-2">
-            {% for link in config.get('social_links', []) %}
-            <div class="link-row flex gap-2 items-center">
-              <input type="text" name="social_label_{{ loop.index0 }}" value="{{ link.label }}" placeholder="Label"
-                class="w-28 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-              <input type="url" name="social_url_{{ loop.index0 }}" value="{{ link.url }}" placeholder="https://..."
-                class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-              <button type="button" onclick="this.closest('.link-row').remove(); renumberLinks()"
-                class="text-gray-400 hover:text-red-500 text-lg leading-none px-1">×</button>
-            </div>
-            {% endfor %}
-          </div>
-          <button type="button" onclick="addLink('', '')"
-            class="mt-2 text-xs text-blue-600 hover:underline">+ Add custom link</button>
-        </div>
+      <div class="grid-2">
+        {{ input_field('signature_title', 'Job Title',
+            value=config.get('signature_title',''), placeholder='Product Manager') }}
+        {{ input_field('signature_company', 'Company',
+            value=config.get('signature_company',''), placeholder='Acme Inc.') }}
       </div>
+
+      {{ input_field('signature_phone', 'Phone',
+          value=config.get('signature_phone',''), placeholder='+1 (555) 000-0000') }}
+
+      {# Social links #}
+      <div class="field">
+        <div class="label">Social &amp; Website Links</div>
+        <div style="display:flex;flex-wrap:wrap;gap:var(--sp-2);margin-bottom:var(--sp-3);">
+          {% for label, prefix in [('LinkedIn','https://linkedin.com/in/'),('WhatsApp','https://wa.me/'),('Instagram','https://instagram.com/'),('Website','https://'),('Facebook','https://facebook.com/'),('Twitter','https://twitter.com/')] %}
+          <button type="button" onclick="addSocialLink('{{ label }}','{{ prefix }}')"
+            style="height:28px;padding:0 10px;border-radius:var(--r-full);border:1px solid var(--border-default);background:var(--bg-elevated);font-size:var(--text-xs);font-weight:500;font-family:var(--font);cursor:pointer;color:var(--text-secondary);transition:all var(--dur-fast) var(--ease);"
+            onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)';"
+            onmouseout="this.style.borderColor='var(--border-default)';this.style.color='var(--text-secondary)';">
+            + {{ label }}
+          </button>
+          {% endfor %}
+        </div>
+
+        <div id="links-container" style="display:flex;flex-direction:column;gap:var(--sp-2);">
+          {% for link in config.get('social_links', []) %}
+          <div class="link-row" style="display:flex;gap:var(--sp-2);align-items:center;">
+            <input type="text" name="social_label_{{ loop.index0 }}" value="{{ link.label }}"
+              placeholder="Label" class="input" style="width:120px;">
+            <input type="url" name="social_url_{{ loop.index0 }}" value="{{ link.url }}"
+              placeholder="https://…" class="input" style="flex:1;">
+            <button type="button" onclick="removeSocialLink(this)"
+              style="color:var(--text-tertiary);font-size:20px;line-height:1;background:none;border:none;cursor:pointer;padding:0 4px;"
+              aria-label="Remove link">×</button>
+          </div>
+          {% endfor %}
+        </div>
+        <button type="button" onclick="addSocialLink('','')"
+          style="margin-top:var(--sp-2);font-size:var(--text-sm);color:var(--accent);background:none;border:none;cursor:pointer;font-family:var(--font);">
+          + Add custom link
+        </button>
+      </div>
+
     </div>
+  </div>
 
-    <div class="flex justify-end">
-      <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-6 rounded-lg text-sm transition-colors">
-        Save Settings
-      </button>
-    </div>
-  </form>
-</div>
-{% endblock %}
+  {# Submit #}
+  <div style="display:flex;justify-content:flex-end;">
+    {{ btn('Save Settings', variant='primary', type='submit') }}
+  </div>
 
-{% block scripts %}
-<script>
-  function addLink(label, urlPrefix) {
-    const container = document.getElementById('links-container');
-    const idx = container.querySelectorAll('.link-row').length;
-    const row = document.createElement('div');
-    row.className = 'link-row flex gap-2 items-center';
-    row.innerHTML = `
-      <input type="text" name="social_label_${idx}" value="${label}" placeholder="Label"
-        class="w-28 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-      <input type="url" name="social_url_${idx}" value="${urlPrefix}" placeholder="https://..."
-        class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-      <button type="button" onclick="this.closest('.link-row').remove(); renumberLinks()"
-        class="text-gray-400 hover:text-red-500 text-lg leading-none px-1">×</button>`;
-    container.appendChild(row);
-    row.querySelector('input[type="url"]').focus();
-  }
-
-  function renumberLinks() {
-    document.querySelectorAll('.link-row').forEach((row, i) => {
-      row.querySelector('input[name^="social_label"]').name = `social_label_${i}`;
-      row.querySelector('input[name^="social_url"]').name = `social_url_${i}`;
-    });
-  }
-</script>
+</form>
 {% endblock %}

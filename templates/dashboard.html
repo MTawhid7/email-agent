@@ -1,167 +1,124 @@
 {% extends "base.html" %}
+{% from 'components/macros.html' import page_header, stat_card, alert %}
 {% block title %}Dashboard — Email Agent{% endblock %}
 
 {% block content %}
-<div class="max-w-3xl">
-  <h1 class="text-2xl font-semibold text-gray-900 mb-6">Dashboard</h1>
+{% set _ = '<script>document.addEventListener("alpine:init",()=>{Alpine.store("agent").init();Alpine.store("review").init();})</script>' %}
 
-  <!-- Status card -->
-  <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 mb-6">
-    <div class="flex items-center justify-between">
-      <div class="flex items-center gap-3">
-        <div id="status-dot" class="w-3 h-3 rounded-full bg-gray-300"></div>
-        <div>
-          <p id="status-text" class="text-base font-medium text-gray-800">Stopped</p>
-          <p class="text-xs text-gray-400">Drafts created today: <span id="draft-count">0</span></p>
+<div x-data x-init="$store.agent.init(); $store.review.init()">
+
+  {{ page_header('Dashboard') }}
+
+  {# ── Status card ────────────────────────────────────────────────────────── #}
+  <div class="card card-lg mb-6" style="margin-bottom:var(--sp-5);">
+    <div class="flex-between">
+
+      {# Left: dot + status + stats #}
+      <div style="display:flex;align-items:center;gap:var(--sp-4);">
+        <div style="display:flex;align-items:center;gap:var(--sp-3);">
+          <span class="status-dot" :class="$store.agent.statusDotClass"></span>
+          <div>
+            <div style="font-size:var(--text-body);font-weight:600;color:var(--text-primary);" x-text="$store.agent.statusLabel">Stopped</div>
+            <div style="font-size:var(--text-sm);color:var(--text-tertiary);">
+              <span x-text="$store.agent.draftCount">0</span> queued today
+              · <a href="/review" style="color:var(--accent);text-decoration:none;" x-show="$store.agent.reviewCount > 0">
+                  <span x-text="$store.agent.reviewCount"></span> pending review
+                </a>
+            </div>
+          </div>
         </div>
       </div>
-      <div class="flex gap-2">
-        <button id="toggle-btn" onclick="toggleAgent()"
-          class="px-5 py-2 rounded-lg text-sm font-medium transition-colors bg-blue-600 hover:bg-blue-700 text-white">
-          Start Agent
-        </button>
-        <!-- Reconnect button — shown only when auth error detected -->
-        <button id="reconnect-btn" onclick="reconnectGmail()" style="display:none"
-          class="px-4 py-2 rounded-lg text-sm font-medium bg-amber-100 hover:bg-amber-200 text-amber-800 transition-colors">
+
+      {# Right: action buttons #}
+      <div style="display:flex;align-items:center;gap:var(--sp-2);">
+        {# Reconnect Gmail — shown only when auth error #}
+        <button
+          x-show="$store.agent.isAuthError && !$store.agent.isReconnecting"
+          @click="$store.agent.reconnect()"
+          class="btn btn-secondary"
+          style="border-color:var(--status-warning);color:var(--status-warning);"
+        >
+          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
           Re-connect Gmail
         </button>
+
+        {# Reconnecting spinner #}
+        <span
+          x-show="$store.agent.isReconnecting"
+          style="font-size:var(--text-sm);color:var(--text-secondary);display:flex;align-items:center;gap:var(--sp-2);"
+        >
+          <svg class="spin" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+          Connecting…
+        </span>
+
+        {# Start / Stop toggle #}
+        <button
+          class="btn btn-agent"
+          :class="$store.agent.running ? 'btn-agent--stop' : 'btn-agent--start'"
+          :disabled="$store.agent.isReconnecting"
+          @click="$store.agent.toggle()"
+          x-text="$store.agent.running ? 'Stop Agent' : 'Start Agent'"
+        >Start Agent</button>
+      </div>
+
+    </div>
+
+    {# Auth error notice #}
+    <div
+      x-show="$store.agent.isAuthError && !$store.agent.isReconnecting"
+      style="margin-top:var(--sp-4);"
+    >
+      <div class="alert alert-warning">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+        <span><strong>Gmail access expired.</strong> Click <em>Re-connect Gmail</em> — a browser window will open for a quick Google sign-in. No reinstall needed.</span>
       </div>
     </div>
 
-    <!-- Auth expired notice -->
-    <div id="auth-notice" class="hidden mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
-      <strong>Gmail access expired.</strong> Click <em>Re-connect Gmail</em> — a browser window will open for a quick Google sign-in. No reinstall needed.
+    {# General (non-auth) error #}
+    <div
+      x-show="$store.agent.error && !$store.agent.isAuthError"
+      style="margin-top:var(--sp-4);"
+    >
+      <div class="alert alert-error">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path stroke-linecap="round" d="M12 8v4m0 4h.01"/></svg>
+        <span x-text="$store.agent.error"></span>
+      </div>
     </div>
 
-    <!-- OAuth waiting state (shown during reconnect) -->
-    <div id="reconnect-waiting" class="hidden mt-4 p-3 bg-blue-50 border border-blue-100 rounded-lg text-sm text-blue-700 flex items-center gap-3">
-      <div class="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin shrink-0"></div>
-      Waiting for Gmail authorization in your browser…
+  </div>{# end status card #}
+
+  {# ── Activity log ───────────────────────────────────────────────────────── #}
+  <div class="card">
+    <div class="flex-between" style="margin-bottom:var(--sp-4);">
+      <div style="font-size:var(--text-md);font-weight:600;color:var(--text-primary);">Activity Log</div>
+      <div style="font-size:var(--text-xs);color:var(--text-tertiary);">Updates every 5 seconds</div>
     </div>
 
-    <!-- General error banner -->
-    <div id="error-banner" class="hidden mt-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700"></div>
+    <div class="log-container" id="log-container" role="log" aria-live="polite" aria-label="Agent activity log">
+      <template x-if="$store.agent.logs.length === 0">
+        <div style="text-align:center;padding:var(--sp-8) 0;color:var(--text-tertiary);font-size:var(--text-md);font-family:var(--font);">
+          No activity yet. Start the agent to begin.
+        </div>
+      </template>
+
+      <template x-for="(entry, idx) in $store.agent.logs" :key="idx">
+        <div class="log-entry fade-in">
+          <span class="log-time" x-text="entry.timestamp"></span>
+          <div>
+            <span
+              :class="{
+                'log-msg--success': entry.level === 'success',
+                'log-msg--error':   entry.level === 'error',
+                'log-msg--info':    entry.level === 'info',
+              }"
+              x-text="entry.message"
+            ></span>
+            <div class="log-summary" x-show="entry.summary" x-text="entry.summary"></div>
+          </div>
+        </div>
+      </template>
+    </div>
   </div>
 
-  <!-- Activity log -->
-  <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-    <h2 class="text-sm font-semibold text-gray-700 mb-3">Activity Log</h2>
-    <div id="log-container" class="space-y-1 max-h-96 overflow-y-auto font-mono text-xs">
-      <p class="text-gray-400 italic" id="log-empty">No activity yet. Start the agent to begin.</p>
-    </div>
-  </div>
 </div>
-{% endblock %}
-
-{% block scripts %}
-<script>
-  let isRunning = false;
-  let lastLogCount = 0;
-  let isReconnecting = false;
-
-  function toggleAgent() {
-    const endpoint = isRunning ? '/api/agent/stop' : '/api/agent/start';
-    fetch(endpoint, { method: 'POST' }).then(() => refreshStatus()).catch(console.error);
-  }
-
-  function reconnectGmail() {
-    isReconnecting = true;
-    document.getElementById('reconnect-waiting').classList.remove('hidden');
-    document.getElementById('auth-notice').classList.add('hidden');
-    document.getElementById('reconnect-btn').style.display = 'none';
-
-    fetch('/api/agent/reconnect', { method: 'POST' })
-      .then(() => pollOAuthStatus())
-      .catch(err => {
-        isReconnecting = false;
-        document.getElementById('reconnect-waiting').classList.add('hidden');
-        console.error(err);
-      });
-  }
-
-  function pollOAuthStatus() {
-    fetch('/setup/api/oauth_status')
-      .then(r => r.json())
-      .then(data => {
-        if (data.done) {
-          isReconnecting = false;
-          document.getElementById('reconnect-waiting').classList.add('hidden');
-          // Auto-start the agent now that auth is refreshed
-          fetch('/api/agent/start', { method: 'POST' }).then(() => refreshStatus());
-        } else if (data.error) {
-          isReconnecting = false;
-          document.getElementById('reconnect-waiting').classList.add('hidden');
-          document.getElementById('error-banner').textContent = 'Re-connect failed: ' + data.error;
-          document.getElementById('error-banner').classList.remove('hidden');
-        } else {
-          setTimeout(pollOAuthStatus, 2000);
-        }
-      })
-      .catch(() => setTimeout(pollOAuthStatus, 3000));
-  }
-
-  function refreshStatus() {
-    if (isReconnecting) return;
-
-    fetch('/api/status')
-      .then(r => r.json())
-      .then(data => {
-        isRunning = data.running;
-        const isAuthError = data.error && /auth|token|credential|expired/i.test(data.error);
-
-        // Status dot
-        document.getElementById('status-dot').className =
-          'w-3 h-3 rounded-full ' + (data.running ? 'bg-green-500' : (isAuthError ? 'bg-amber-400' : 'bg-gray-300'));
-
-        // Status text
-        document.getElementById('status-text').textContent =
-          data.running ? 'Running' : (isAuthError ? 'Gmail disconnected' : 'Stopped');
-
-        // Toggle button
-        const btn = document.getElementById('toggle-btn');
-        btn.textContent = data.running ? 'Stop Agent' : 'Start Agent';
-        btn.className = 'px-5 py-2 rounded-lg text-sm font-medium transition-colors ' +
-          (data.running ? 'bg-red-100 hover:bg-red-200 text-red-700' : 'bg-blue-600 hover:bg-blue-700 text-white');
-
-        // Reconnect button — only show when auth error
-        document.getElementById('reconnect-btn').style.display = isAuthError ? 'block' : 'none';
-        document.getElementById('auth-notice').classList.toggle('hidden', !isAuthError);
-
-        // Draft count
-        document.getElementById('draft-count').textContent = data.draft_count || 0;
-
-        // General error (non-auth)
-        const banner = document.getElementById('error-banner');
-        if (data.error && !isAuthError) {
-          banner.textContent = data.error;
-          banner.classList.remove('hidden');
-        } else {
-          banner.classList.add('hidden');
-        }
-
-        // Log entries — only append new ones
-        if (data.logs && data.logs.length > lastLogCount) {
-          const container = document.getElementById('log-container');
-          document.getElementById('log-empty')?.remove();
-          data.logs.slice(lastLogCount).forEach(entry => {
-            const div = document.createElement('div');
-            const color = entry.level === 'success' ? 'text-green-700'
-                        : entry.level === 'error'   ? 'text-red-600'
-                        : 'text-gray-600';
-            div.className = 'py-0.5';
-            const summary = entry.summary ? `<div class="text-gray-400 ml-32 -mt-0.5">${entry.summary}</div>` : '';
-            div.innerHTML = `<div class="flex gap-2"><span class="text-gray-400 shrink-0">${entry.timestamp}</span>
-                             <span class="${color}">${entry.message}</span></div>${summary}`;
-            container.appendChild(div);
-          });
-          lastLogCount = data.logs.length;
-          container.scrollTop = container.scrollHeight;
-        }
-      })
-      .catch(console.error);
-  }
-
-  refreshStatus();
-  setInterval(refreshStatus, 5000);
-</script>
 {% endblock %}

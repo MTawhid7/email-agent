@@ -4,121 +4,86 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Setup — Email Agent</title>
-  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <script src="{{ url_for('static', filename='js/app.js') }}" defer></script>
 </head>
-<body class="bg-gray-50 min-h-screen flex items-center justify-center py-8">
-  <div class="w-full max-w-lg">
+<body>
+<div class="wizard-shell">
+<div class="wizard-card" style="max-width:540px;">
 
-    <!-- Step indicator -->
-    <div class="flex items-center justify-center gap-2 mb-8">
-      {% for i in range(1, 5) %}
-        <div class="flex items-center gap-2">
-          <div class="w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold
-            {% if i == 3 %}bg-blue-600 text-white{% elif i < 3 %}bg-blue-200 text-blue-700{% else %}bg-gray-200 text-gray-500{% endif %}">
-            {% if i < 3 %}✓{% else %}{{ i }}{% endif %}
-          </div>
-          {% if i < 4 %}<div class="w-8 h-px {% if i < 3 %}bg-blue-300{% else %}bg-gray-300{% endif %}"></div>{% endif %}
+  <div class="wizard-header">
+    <div class="wizard-steps">
+      {% for i in range(1,5) %}
+        <div class="wizard-step {% if i < 3 %}wizard-step--done{% elif i == 3 %}wizard-step--active{% else %}wizard-step--pending{% endif %}">
+          {{ '✓' if i < 3 else i }}
         </div>
+        {% if i < 4 %}
+          <div class="wizard-connector {% if i < 3 %}wizard-connector--done{% endif %}"></div>
+        {% endif %}
       {% endfor %}
     </div>
-
-    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
-      <h1 class="text-xl font-semibold text-gray-900 mb-1">Your Signature</h1>
-      <p class="text-sm text-gray-500 mb-6">This appears at the bottom of every reply.</p>
-
-      {% if error %}
-        <div class="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">{{ error }}</div>
-      {% endif %}
-
-      <form method="POST" class="space-y-4">
-        <!-- Basic info -->
-        <div class="grid grid-cols-2 gap-3">
-          <div class="col-span-2">
-            <label class="block text-xs font-medium text-gray-600 mb-1">Full Name <span class="text-red-500">*</span></label>
-            <input type="text" name="signature_name" value="{{ signature_name }}" placeholder="Jane Doe"
-              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" required>
-          </div>
-          <div>
-            <label class="block text-xs font-medium text-gray-600 mb-1">Job Title</label>
-            <input type="text" name="signature_title" value="{{ signature_title }}" placeholder="Product Manager"
-              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-          </div>
-          <div>
-            <label class="block text-xs font-medium text-gray-600 mb-1">Company</label>
-            <input type="text" name="signature_company" value="{{ signature_company }}" placeholder="Acme Inc."
-              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-          </div>
-          <div class="col-span-2">
-            <label class="block text-xs font-medium text-gray-600 mb-1">Phone</label>
-            <input type="text" name="signature_phone" value="{{ signature_phone }}" placeholder="+1 (555) 000-0000"
-              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-          </div>
-        </div>
-
-        <!-- Dynamic social links -->
-        <div>
-          <label class="block text-xs font-medium text-gray-600 mb-2">Social & Website Links</label>
-
-          <!-- Quick-add presets -->
-          <div class="flex flex-wrap gap-2 mb-3">
-            {% for preset in [('LinkedIn','https://linkedin.com/in/'), ('WhatsApp','https://wa.me/'), ('Instagram','https://instagram.com/'), ('Website','https://'), ('Facebook','https://facebook.com/'), ('Twitter','https://twitter.com/')] %}
-            <button type="button" onclick="addLink('{{ preset[0] }}', '{{ preset[1] }}')"
-              class="text-xs px-3 py-1 rounded-full border border-gray-200 bg-gray-50 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700 transition-colors">
-              + {{ preset[0] }}
-            </button>
-            {% endfor %}
-          </div>
-
-          <!-- Link rows container -->
-          <div id="links-container" class="space-y-2">
-            {% for link in social_links %}
-            <div class="link-row flex gap-2 items-center">
-              <input type="text" name="social_label_{{ loop.index0 }}" value="{{ link.label }}" placeholder="Label"
-                class="w-28 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-              <input type="url" name="social_url_{{ loop.index0 }}" value="{{ link.url }}" placeholder="https://..."
-                class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-              <button type="button" onclick="this.closest('.link-row').remove(); renumberLinks()"
-                class="text-gray-400 hover:text-red-500 text-lg leading-none px-1">×</button>
-            </div>
-            {% endfor %}
-          </div>
-
-          <button type="button" onclick="addLink('', '')"
-            class="mt-2 text-xs text-blue-600 hover:underline">+ Add custom link</button>
-        </div>
-
-        <button type="submit"
-          class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg text-sm transition-colors mt-2">
-          Continue →
-        </button>
-      </form>
-    </div>
-    <p class="text-center text-xs text-gray-400 mt-4">Step 3 of 4</p>
+    <h1 class="wizard-title">Email Signature</h1>
+    <p class="wizard-desc">This appears at the bottom of every reply you send.</p>
   </div>
 
-  <script>
-    function addLink(label, urlPrefix) {
-      const container = document.getElementById('links-container');
-      const idx = container.querySelectorAll('.link-row').length;
-      const row = document.createElement('div');
-      row.className = 'link-row flex gap-2 items-center';
-      row.innerHTML = `
-        <input type="text" name="social_label_${idx}" value="${label}" placeholder="Label"
-          class="w-28 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-        <input type="url" name="social_url_${idx}" value="${urlPrefix}" placeholder="https://..."
-          class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-        <button type="button" onclick="this.closest('.link-row').remove(); renumberLinks()"
-          class="text-gray-400 hover:text-red-500 text-lg leading-none px-1">×</button>`;
-      container.appendChild(row);
-      row.querySelector('input[type="url"]').focus();
-    }
+  <div class="wizard-body">
+    {% if error %}
+      <div class="alert alert-error" style="margin-bottom:var(--sp-4);">{{ error }}</div>
+    {% endif %}
 
-    function renumberLinks() {
-      document.querySelectorAll('.link-row').forEach((row, i) => {
-        row.querySelector('input[name^="social_label"]').name = `social_label_${i}`;
-        row.querySelector('input[name^="social_url"]').name = `social_url_${i}`;
-      });
-    }
-  </script>
+    <form method="POST" class="wizard-form">
+      <div class="field">
+        <label class="label label-required">Full Name</label>
+        <input type="text" name="signature_name" value="{{ signature_name }}" placeholder="Jane Doe" required class="input">
+      </div>
+      <div class="grid-2">
+        <div class="field">
+          <label class="label">Job Title</label>
+          <input type="text" name="signature_title" value="{{ signature_title }}" placeholder="Product Manager" class="input">
+        </div>
+        <div class="field">
+          <label class="label">Company</label>
+          <input type="text" name="signature_company" value="{{ signature_company }}" placeholder="Acme Inc." class="input">
+        </div>
+      </div>
+      <div class="field">
+        <label class="label">Phone</label>
+        <input type="text" name="signature_phone" value="{{ signature_phone }}" placeholder="+1 (555) 000-0000" class="input">
+      </div>
+
+      {# Social links #}
+      <div class="field">
+        <div class="label">Social &amp; Website Links</div>
+        <div style="display:flex;flex-wrap:wrap;gap:var(--sp-2);margin-bottom:var(--sp-3);">
+          {% for label, prefix in [('LinkedIn','https://linkedin.com/in/'),('WhatsApp','https://wa.me/'),('Instagram','https://instagram.com/'),('Website','https://'),('Twitter','https://twitter.com/')] %}
+          <button type="button" onclick="addSocialLink('{{ label }}','{{ prefix }}')"
+            style="height:26px;padding:0 10px;border-radius:var(--r-full);border:1px solid var(--border-default);background:var(--bg-elevated);font-size:var(--text-xs);font-weight:500;font-family:var(--font);cursor:pointer;color:var(--text-secondary);">
+            + {{ label }}
+          </button>
+          {% endfor %}
+        </div>
+        <div id="links-container" style="display:flex;flex-direction:column;gap:var(--sp-2);">
+          {% for link in social_links %}
+          <div class="link-row" style="display:flex;gap:var(--sp-2);align-items:center;">
+            <input type="text" name="social_label_{{ loop.index0 }}" value="{{ link.label }}" placeholder="Label" class="input" style="width:110px;">
+            <input type="url" name="social_url_{{ loop.index0 }}" value="{{ link.url }}" placeholder="https://…" class="input" style="flex:1;">
+            <button type="button" onclick="removeSocialLink(this)"
+              style="color:var(--text-tertiary);font-size:18px;background:none;border:none;cursor:pointer;padding:0 4px;" aria-label="Remove">×</button>
+          </div>
+          {% endfor %}
+        </div>
+        <button type="button" onclick="addSocialLink('','')"
+          style="margin-top:var(--sp-2);font-size:var(--text-sm);color:var(--accent);background:none;border:none;cursor:pointer;font-family:var(--font);">
+          + Add custom link
+        </button>
+      </div>
+
+      <button type="submit" class="btn btn-primary btn-lg" style="width:100%;">Continue →</button>
+    </form>
+  </div>
+
+  <div class="wizard-footer">Step 3 of 4</div>
+</div>
+</div>
 </body>
 </html>
