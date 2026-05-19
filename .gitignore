@@ -8,9 +8,11 @@ venv/
 
 # Secrets — NEVER commit these
 .env
-credentials/credentials.json
+# user's personal Gmail access token — never shared
 credentials/token.json
 data/
+
+# credentials.json IS committed — it's the shared OAuth app identity, not a personal token
 
 # Build output
 build/

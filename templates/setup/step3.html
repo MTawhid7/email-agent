@@ -7,7 +7,7 @@
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-gray-50 min-h-screen flex items-center justify-center py-8">
-  <div class="w-full max-w-md">
+  <div class="w-full max-w-lg">
 
     <!-- Step indicator -->
     <div class="flex items-center justify-center gap-2 mb-8">
@@ -24,13 +24,14 @@
 
     <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
       <h1 class="text-xl font-semibold text-gray-900 mb-1">Your Signature</h1>
-      <p class="text-sm text-gray-500 mb-6">This will appear at the bottom of every email reply.</p>
+      <p class="text-sm text-gray-500 mb-6">This appears at the bottom of every reply.</p>
 
       {% if error %}
         <div class="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">{{ error }}</div>
       {% endif %}
 
-      <form method="POST" class="space-y-3">
+      <form method="POST" class="space-y-4">
+        <!-- Basic info -->
         <div class="grid grid-cols-2 gap-3">
           <div class="col-span-2">
             <label class="block text-xs font-medium text-gray-600 mb-1">Full Name <span class="text-red-500">*</span></label>
@@ -52,29 +53,72 @@
             <input type="text" name="signature_phone" value="{{ signature_phone }}" placeholder="+1 (555) 000-0000"
               class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
           </div>
-          <div class="col-span-2">
-            <label class="block text-xs font-medium text-gray-600 mb-1">LinkedIn URL</label>
-            <input type="url" name="signature_linkedin" value="{{ signature_linkedin }}" placeholder="https://linkedin.com/in/yourhandle"
-              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-          </div>
-          <div>
-            <label class="block text-xs font-medium text-gray-600 mb-1">GitHub URL</label>
-            <input type="url" name="signature_github" value="{{ signature_github }}" placeholder="https://github.com/you"
-              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-          </div>
-          <div>
-            <label class="block text-xs font-medium text-gray-600 mb-1">Website URL</label>
-            <input type="url" name="signature_website" value="{{ signature_website }}" placeholder="https://yoursite.com"
-              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-          </div>
         </div>
-        <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg text-sm transition-colors mt-2">
+
+        <!-- Dynamic social links -->
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-2">Social & Website Links</label>
+
+          <!-- Quick-add presets -->
+          <div class="flex flex-wrap gap-2 mb-3">
+            {% for preset in [('LinkedIn','https://linkedin.com/in/'), ('WhatsApp','https://wa.me/'), ('Instagram','https://instagram.com/'), ('Website','https://'), ('Facebook','https://facebook.com/'), ('Twitter','https://twitter.com/')] %}
+            <button type="button" onclick="addLink('{{ preset[0] }}', '{{ preset[1] }}')"
+              class="text-xs px-3 py-1 rounded-full border border-gray-200 bg-gray-50 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700 transition-colors">
+              + {{ preset[0] }}
+            </button>
+            {% endfor %}
+          </div>
+
+          <!-- Link rows container -->
+          <div id="links-container" class="space-y-2">
+            {% for link in social_links %}
+            <div class="link-row flex gap-2 items-center">
+              <input type="text" name="social_label_{{ loop.index0 }}" value="{{ link.label }}" placeholder="Label"
+                class="w-28 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+              <input type="url" name="social_url_{{ loop.index0 }}" value="{{ link.url }}" placeholder="https://..."
+                class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+              <button type="button" onclick="this.closest('.link-row').remove(); renumberLinks()"
+                class="text-gray-400 hover:text-red-500 text-lg leading-none px-1">×</button>
+            </div>
+            {% endfor %}
+          </div>
+
+          <button type="button" onclick="addLink('', '')"
+            class="mt-2 text-xs text-blue-600 hover:underline">+ Add custom link</button>
+        </div>
+
+        <button type="submit"
+          class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg text-sm transition-colors mt-2">
           Continue →
         </button>
       </form>
     </div>
-
     <p class="text-center text-xs text-gray-400 mt-4">Step 3 of 4</p>
   </div>
+
+  <script>
+    function addLink(label, urlPrefix) {
+      const container = document.getElementById('links-container');
+      const idx = container.querySelectorAll('.link-row').length;
+      const row = document.createElement('div');
+      row.className = 'link-row flex gap-2 items-center';
+      row.innerHTML = `
+        <input type="text" name="social_label_${idx}" value="${label}" placeholder="Label"
+          class="w-28 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+        <input type="url" name="social_url_${idx}" value="${urlPrefix}" placeholder="https://..."
+          class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+        <button type="button" onclick="this.closest('.link-row').remove(); renumberLinks()"
+          class="text-gray-400 hover:text-red-500 text-lg leading-none px-1">×</button>`;
+      container.appendChild(row);
+      row.querySelector('input[type="url"]').focus();
+    }
+
+    function renumberLinks() {
+      document.querySelectorAll('.link-row').forEach((row, i) => {
+        row.querySelector('input[name^="social_label"]').name = `social_label_${i}`;
+        row.querySelector('input[name^="social_url"]').name = `social_url_${i}`;
+      });
+    }
+  </script>
 </body>
 </html>

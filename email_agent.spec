@@ -14,8 +14,9 @@ a = Analysis(
     pathex=["."],
     binaries=[],
     datas=[
-        ("templates",  "templates"),
-        ("static",     "static"),
+        ("templates",   "templates"),
+        ("static",      "static"),
+        ("credentials/credentials.json", "credentials"),  # bundled shared OAuth app identity
     ],
     hiddenimports=[
         # Google Auth

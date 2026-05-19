@@ -1,5 +1,6 @@
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import Any
 
 from dotenv import load_dotenv
 
@@ -17,9 +18,8 @@ class Settings:
     signature_title: str
     signature_company: str
     signature_phone: str
-    signature_linkedin: str
-    signature_github: str
-    signature_website: str
+    # Dynamic list of {"label": str, "url": str} dicts — replaces fixed social fields
+    social_links: tuple
 
 
 def _require(key: str) -> str:
@@ -33,10 +33,40 @@ def _optional(key: str, default: str = "") -> str:
     return os.getenv(key, default).strip()
 
 
+def _parse_social_links(data: dict) -> tuple:
+    """
+    Read social_links list from config dict.
+    Falls back to migrating old individual fields for backward compatibility.
+    """
+    links = data.get("social_links")
+    if links and isinstance(links, list):
+        # Validate and clean each entry
+        result = []
+        for item in links:
+            if isinstance(item, dict):
+                label = str(item.get("label", "")).strip()
+                url = str(item.get("url", "")).strip()
+                if label and url:
+                    result.append({"label": label, "url": url})
+        return tuple(result)
+
+    # Migrate old flat fields if present
+    result = []
+    for key, label in [
+        ("signature_linkedin", "LinkedIn"),
+        ("signature_github", "GitHub"),
+        ("signature_website", "Website"),
+    ]:
+        url = str(data.get(key, "")).strip()
+        if url:
+            result.append({"label": label, "url": url})
+    return tuple(result)
+
+
 def load_settings_from_dict(data: dict) -> Settings:
     """
     Populate a Settings instance from a plain dict (e.g. parsed from config.json).
-    Raises ConfigError for missing required fields, matching load_settings() behaviour.
+    Raises ConfigError for missing required fields.
     """
     def require(key: str) -> str:
         value = str(data.get(key, "")).strip()
@@ -62,9 +92,7 @@ def load_settings_from_dict(data: dict) -> Settings:
         signature_title=optional("signature_title"),
         signature_company=optional("signature_company"),
         signature_phone=optional("signature_phone"),
-        signature_linkedin=optional("signature_linkedin"),
-        signature_github=optional("signature_github"),
-        signature_website=optional("signature_website"),
+        social_links=_parse_social_links(data),
     )
 
 
@@ -76,6 +104,13 @@ def load_settings() -> Settings:
     except ValueError:
         raise ConfigError("POLL_INTERVAL_SECONDS must be a valid integer.")
 
+    # Build social_links from individual env vars for .env compatibility
+    social_links_data: dict[str, Any] = {}
+    for key in ("signature_linkedin", "signature_github", "signature_website"):
+        val = os.getenv(key.upper(), "").strip()
+        if val:
+            social_links_data[key] = val
+
     return Settings(
         gemini_api_key=_require("GEMINI_API_KEY"),
         gemini_model=_require("GEMINI_MODEL"),
@@ -86,7 +121,5 @@ def load_settings() -> Settings:
         signature_title=_optional("SIGNATURE_TITLE"),
         signature_company=_optional("SIGNATURE_COMPANY"),
         signature_phone=_optional("SIGNATURE_PHONE"),
-        signature_linkedin=_optional("SIGNATURE_LINKEDIN"),
-        signature_github=_optional("SIGNATURE_GITHUB"),
-        signature_website=_optional("SIGNATURE_WEBSITE"),
+        social_links=_parse_social_links(social_links_data),
     )

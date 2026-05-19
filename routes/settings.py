@@ -15,6 +15,7 @@ def settings():
         except ValueError:
             poll_interval = 300
 
+        from routes.setup import _parse_social_links_from_form
         updated = {
             "gemini_api_key": request.form.get("gemini_api_key", "").strip(),
             "gemini_model": request.form.get("gemini_model", "gemini-3.1-flash-lite").strip(),
@@ -25,9 +26,7 @@ def settings():
             "signature_title": request.form.get("signature_title", "").strip(),
             "signature_company": request.form.get("signature_company", "").strip(),
             "signature_phone": request.form.get("signature_phone", "").strip(),
-            "signature_linkedin": request.form.get("signature_linkedin", "").strip(),
-            "signature_github": request.form.get("signature_github", "").strip(),
-            "signature_website": request.form.get("signature_website", "").strip(),
+            "social_links": _parse_social_links_from_form(request.form),
         }
 
         if not updated["gemini_api_key"]:

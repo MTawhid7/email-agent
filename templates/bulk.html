@@ -6,39 +6,97 @@
   <h1 class="text-2xl font-semibold text-gray-900 mb-6">Bulk Send</h1>
 
   {% if not job_id %}
-  <!-- Upload form -->
   <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 mb-6">
-    <p class="text-sm text-gray-500 mb-5">Upload a CSV with columns <code class="bg-gray-100 px-1 rounded">name, email, notes</code>. One personalized draft will be created per row.</p>
 
     {% if error %}
       <div class="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">{{ error }}</div>
     {% endif %}
 
-    <form method="POST" enctype="multipart/form-data" class="space-y-4">
-      <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">Recipients CSV</label>
-        <input type="file" name="csv_file" accept=".csv" required
-          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-        <p class="text-xs text-gray-400 mt-1">See <code>recipients.csv.example</code> for the expected format.</p>
-      </div>
-      <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">Email Intent</label>
-        <textarea name="intent" rows="3" placeholder="e.g. Follow up on our Q2 proposal and introduce the new pricing options"
-          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" required></textarea>
-        <p class="text-xs text-gray-400 mt-1">What should each email communicate? This becomes the subject and the AI's main instruction.</p>
-      </div>
-      <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg text-sm transition-colors">
-        Generate Drafts
+    <!-- Tab switcher -->
+    <div class="flex border-b border-gray-100 mb-5">
+      <button id="tab-manual" onclick="switchTab('manual')"
+        class="tab-btn px-4 py-2 text-sm font-medium border-b-2 border-blue-600 text-blue-700 -mb-px">
+        Enter manually
       </button>
-    </form>
+      <button id="tab-csv" onclick="switchTab('csv')"
+        class="tab-btn px-4 py-2 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700 -mb-px">
+        Upload CSV
+      </button>
+    </div>
+
+    <!-- ── Manual entry form ──────────────────────────────────────────────── -->
+    <div id="panel-manual">
+      <form method="POST" id="form-manual" class="space-y-4">
+        <input type="hidden" name="input_mode" value="manual">
+
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Email Intent</label>
+          <textarea name="intent" rows="2"
+            placeholder="e.g. Follow up on our Q2 proposal and introduce the new pricing options"
+            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" required></textarea>
+        </div>
+
+        <!-- Recipient rows -->
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-2">Recipients</label>
+          <div id="recipients-container" class="space-y-2">
+            <!-- Header -->
+            <div class="grid grid-cols-12 gap-2 text-xs font-medium text-gray-400 px-1">
+              <span class="col-span-4">Full Name</span>
+              <span class="col-span-5">Email</span>
+              <span class="col-span-3">Notes (optional)</span>
+            </div>
+            <!-- Initial row -->
+            <div class="recipient-row grid grid-cols-12 gap-2 items-center">
+              <input type="text" name="r_name_0" placeholder="Alice Johnson"
+                class="col-span-4 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+              <input type="email" name="r_email_0" placeholder="alice@example.com" required
+                class="col-span-5 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+              <input type="text" name="r_notes_0" placeholder="Brief context…"
+                class="col-span-2 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+              <button type="button" onclick="removeRow(this)" class="col-span-1 text-gray-300 hover:text-red-400 text-lg text-center">×</button>
+            </div>
+          </div>
+          <button type="button" onclick="addRow()"
+            class="mt-2 text-xs text-blue-600 hover:underline">+ Add recipient</button>
+        </div>
+
+        <button type="submit"
+          class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg text-sm transition-colors">
+          Generate Drafts
+        </button>
+      </form>
+    </div>
+
+    <!-- ── CSV upload form ────────────────────────────────────────────────── -->
+    <div id="panel-csv" class="hidden">
+      <form method="POST" enctype="multipart/form-data" class="space-y-4">
+        <input type="hidden" name="input_mode" value="csv">
+        <p class="text-sm text-gray-500">Upload a CSV with columns <code class="bg-gray-100 px-1 rounded">name, email, notes</code>.</p>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Recipients CSV</label>
+          <input type="file" name="csv_file" accept=".csv" required
+            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Email Intent</label>
+          <textarea name="intent" rows="2"
+            placeholder="e.g. Follow up on our Q2 proposal and introduce the new pricing options"
+            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" required></textarea>
+        </div>
+        <button type="submit"
+          class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg text-sm transition-colors">
+          Generate Drafts
+        </button>
+      </form>
+    </div>
   </div>
   {% endif %}
 
+  <!-- ── Progress panel ──────────────────────────────────────────────────── -->
   {% if job_id %}
-  <!-- Progress panel -->
   <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
     <h2 class="text-sm font-semibold text-gray-700 mb-4">Generating Drafts…</h2>
-
     <div class="mb-4">
       <div class="flex justify-between text-xs text-gray-500 mb-1">
         <span id="progress-text">Starting…</span>
@@ -48,18 +106,15 @@
         <div id="progress-bar" class="bg-blue-600 h-2 rounded-full transition-all" style="width:0%"></div>
       </div>
     </div>
-
     <div id="job-log" class="space-y-1 max-h-72 overflow-y-auto font-mono text-xs"></div>
-
     <div id="done-banner" class="hidden mt-4 p-3 bg-green-50 border border-green-200 rounded-lg text-sm text-green-700">
       All done! Open Gmail → Drafts to review and send.
-      <a href="/bulk" class="underline ml-2">Start another</a>
+      <a href="/bulk" class="underline ml-2">Start another batch</a>
     </div>
   </div>
 
   <script>
     const jobId = "{{ job_id }}";
-
     function pollJob() {
       fetch('/api/bulk/status/' + jobId)
         .then(r => r.json())
@@ -67,34 +122,62 @@
           const total = data.total || 0;
           const done = (data.done || 0) + (data.failed || 0);
           const pct = total > 0 ? Math.round(done / total * 100) : 0;
-
           document.getElementById('progress-bar').style.width = pct + '%';
           document.getElementById('progress-pct').textContent = pct + '%';
-          document.getElementById('progress-text').textContent =
-            total > 0 ? `${done} of ${total} processed` : 'Working…';
-
+          document.getElementById('progress-text').textContent = total > 0 ? `${done} of ${total} processed` : 'Working…';
           const logEl = document.getElementById('job-log');
           logEl.innerHTML = '';
           (data.log || []).forEach(entry => {
             const div = document.createElement('div');
-            const color = entry.level === 'success' ? 'text-green-700' : 'text-red-600';
-            div.className = 'py-0.5 ' + color;
+            div.className = 'py-0.5 ' + (entry.level === 'success' ? 'text-green-700' : 'text-red-600');
             div.textContent = entry.message;
             logEl.appendChild(div);
           });
           logEl.scrollTop = logEl.scrollHeight;
-
-          if (data.finished) {
-            document.getElementById('done-banner').classList.remove('hidden');
-          } else {
-            setTimeout(pollJob, 2000);
-          }
+          if (data.finished) document.getElementById('done-banner').classList.remove('hidden');
+          else setTimeout(pollJob, 2000);
         })
         .catch(() => setTimeout(pollJob, 3000));
     }
     pollJob();
   </script>
   {% endif %}
-
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  function switchTab(tab) {
+    document.getElementById('panel-manual').classList.toggle('hidden', tab !== 'manual');
+    document.getElementById('panel-csv').classList.toggle('hidden', tab !== 'csv');
+    document.getElementById('tab-manual').className = 'tab-btn px-4 py-2 text-sm font-medium border-b-2 -mb-px ' +
+      (tab === 'manual' ? 'border-blue-600 text-blue-700' : 'border-transparent text-gray-500 hover:text-gray-700');
+    document.getElementById('tab-csv').className = 'tab-btn px-4 py-2 text-sm font-medium border-b-2 -mb-px ' +
+      (tab === 'csv' ? 'border-blue-600 text-blue-700' : 'border-transparent text-gray-500 hover:text-gray-700');
+  }
+
+  let rowCount = 1;
+
+  function addRow() {
+    const container = document.getElementById('recipients-container');
+    const i = rowCount++;
+    const row = document.createElement('div');
+    row.className = 'recipient-row grid grid-cols-12 gap-2 items-center';
+    row.innerHTML = `
+      <input type="text" name="r_name_${i}" placeholder="Full Name"
+        class="col-span-4 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+      <input type="email" name="r_email_${i}" placeholder="email@example.com"
+        class="col-span-5 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+      <input type="text" name="r_notes_${i}" placeholder="Brief context…"
+        class="col-span-2 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+      <button type="button" onclick="removeRow(this)" class="col-span-1 text-gray-300 hover:text-red-400 text-lg text-center">×</button>`;
+    container.appendChild(row);
+    row.querySelector('input[type="email"]').focus();
+  }
+
+  function removeRow(btn) {
+    const rows = document.querySelectorAll('.recipient-row');
+    if (rows.length > 1) btn.closest('.recipient-row').remove();
+  }
+</script>
 {% endblock %}

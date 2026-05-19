@@ -1,12 +1,13 @@
 import json
 import os
+import sys
 from pathlib import Path
 
 
 def _data_dir() -> Path:
     """
-    Resolve the writable data directory at call time (not import time) so that
-    launcher.py can set EMAIL_AGENT_DATA_DIR before any Flask code imports this module.
+    Resolve the writable data directory at call time so that launcher.py can set
+    EMAIL_AGENT_DATA_DIR before any Flask code imports this module.
     """
     env_val = os.environ.get("EMAIL_AGENT_DATA_DIR", "").strip()
     if env_val:
@@ -18,7 +19,8 @@ def _config_path() -> Path:
     return _data_dir() / "config.json"
 
 
-def _credentials_path() -> Path:
+def _user_credentials_path() -> Path:
+    """Path where a manually uploaded credentials.json would be stored."""
     return _data_dir() / "credentials" / "credentials.json"
 
 
@@ -28,6 +30,22 @@ def _token_path() -> Path:
 
 def _contacts_path() -> Path:
     return _data_dir() / "contacts" / "contacts.json"
+
+
+def _bundled_credentials_path() -> Path | None:
+    """
+    In a PyInstaller frozen build, credentials.json is bundled read-only inside
+    sys._MEIPASS. Returns its path if it exists there, otherwise None.
+    """
+    if getattr(sys, "frozen", False):
+        bundled = Path(sys._MEIPASS) / "credentials" / "credentials.json"  # type: ignore[attr-defined]
+        if bundled.exists():
+            return bundled
+    # Development fallback: project-local credentials/ directory
+    dev_path = Path(__file__).parent.parent / "credentials" / "credentials.json"
+    if dev_path.exists():
+        return dev_path
+    return None
 
 
 # ── Config file ────────────────────────────────────────────────────────────────
@@ -66,25 +84,38 @@ def merge_and_save_config(partial: dict) -> None:
 
 # ── Credentials file ───────────────────────────────────────────────────────────
 
+def credentials_file_exists() -> bool:
+    """True if a credentials.json is available (bundled or uploaded)."""
+    return get_credentials_path() is not None
+
+
 def save_credentials_file(file_bytes: bytes) -> str:
-    p = _credentials_path()
+    """Save a manually uploaded credentials.json. Returns the path."""
+    p = _user_credentials_path()
     p.parent.mkdir(parents=True, exist_ok=True)
     with open(p, "wb") as f:
         f.write(file_bytes)
     return str(p)
 
 
-def credentials_file_exists() -> bool:
-    return _credentials_path().exists()
+# ── Path accessors ─────────────────────────────────────────────────────────────
 
-
-# ── Path accessors (used by daemon and routes) ─────────────────────────────────
-
-def get_credentials_path() -> str:
-    return str(_credentials_path())
+def get_credentials_path() -> str | None:
+    """
+    Returns the path to credentials.json, preferring the bundled version.
+    Returns None if no credentials file is found anywhere.
+    """
+    bundled = _bundled_credentials_path()
+    if bundled:
+        return str(bundled)
+    user = _user_credentials_path()
+    if user.exists():
+        return str(user)
+    return None
 
 
 def get_token_path() -> str:
+    """Token is always stored in the writable DATA_DIR, never bundled."""
     return str(_token_path())
 
 
