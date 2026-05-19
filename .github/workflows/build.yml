@@ -20,7 +20,7 @@ jobs:
         uses: actions/checkout@v5
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.11"
 
@@ -36,7 +36,7 @@ jobs:
           zip -r "Email-Agent-Mac.zip" "Email Agent.app"
 
       - name: Upload macOS artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: Email-Agent-Mac
           path: dist/Email-Agent-Mac.zip
@@ -45,14 +45,14 @@ jobs:
   # ── Windows → Email Agent.exe ─────────────────────────────────────────────────
   build-windows:
     name: Build Windows (.exe)
-    runs-on: windows-latest
+    runs-on: windows-2025
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.11"
 
@@ -63,7 +63,7 @@ jobs:
         run: pyinstaller email_agent.spec
 
       - name: Upload Windows artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: Email-Agent-Windows
           path: "dist/Email Agent.exe"
