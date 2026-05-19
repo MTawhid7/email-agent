@@ -2,12 +2,19 @@
 # Build with: pyinstaller email_agent.spec
 # Produces: dist/Email Agent.app (Mac) or dist/Email Agent.exe (Windows)
 
+import os
 import sys
 from PyInstaller.building.api import PYZ, EXE, COLLECT
 from PyInstaller.building.build_main import Analysis
 from PyInstaller.building.osx import BUNDLE
 
 block_cipher = None
+
+# Stamped by CI via the BUILD_NUMBER env var (= github.run_number).
+# Each build gets a unique bundle identifier so macOS Gatekeeper treats it
+# as a new app — preventing the stale-cache -47 error on updates.
+_build_number = os.environ.get("BUILD_NUMBER", "dev")
+_bundle_id = f"com.emailagent.app.{_build_number}"
 
 a = Analysis(
     ["launcher.py"],
@@ -84,7 +91,7 @@ if sys.platform == "darwin":
         exe,
         name="Email Agent.app",
         icon=None,           # Replace with "icon.icns" if you have one
-        bundle_identifier="com.emailagent.app",
+        bundle_identifier=_bundle_id,
         info_plist={
             "NSHighResolutionCapable": True,
             "LSUIElement": False,

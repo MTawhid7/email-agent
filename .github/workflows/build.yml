@@ -28,6 +28,8 @@ jobs:
         run: pip install -r requirements.txt pyinstaller
 
       - name: Build with PyInstaller
+        env:
+          BUILD_NUMBER: ${{ github.run_number }}
         run: pyinstaller email_agent.spec
 
       - name: Fix executable permissions before zipping
