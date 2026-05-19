@@ -36,7 +36,7 @@ jobs:
       - name: Package .app bundle
         run: |
           cd dist
-          zip -r "Email-Agent-Mac.zip" "Email Agent.app"
+          zip -yr "Email-Agent-Mac.zip" "Email Agent.app"
 
       - name: Upload macOS artifact
         uses: actions/upload-artifact@v6
