@@ -1,0 +1,67 @@
+name: Build Desktop App
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:   # allows manual trigger from the GitHub Actions tab
+
+jobs:
+
+  # ── macOS → Email Agent.app ──────────────────────────────────────────────────
+  build-mac:
+    name: Build macOS (.app)
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt pyinstaller
+
+      - name: Build with PyInstaller
+        run: pyinstaller email_agent.spec
+
+      - name: Zip the .app bundle
+        run: |
+          cd dist
+          zip -r "Email-Agent-Mac.zip" "Email Agent.app"
+
+      - name: Upload macOS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Email-Agent-Mac
+          path: dist/Email-Agent-Mac.zip
+          retention-days: 30
+
+  # ── Windows → Email Agent.exe ─────────────────────────────────────────────────
+  build-windows:
+    name: Build Windows (.exe)
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt pyinstaller
+
+      - name: Build with PyInstaller
+        run: pyinstaller email_agent.spec
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Email-Agent-Windows
+          path: "dist/Email Agent.exe"
+          retention-days: 30

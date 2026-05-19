@@ -1,0 +1,35 @@
+/* Nav links */
+.nav-link {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  color: #4b5563;
+  text-decoration: none;
+  transition: background-color 0.15s, color 0.15s;
+}
+.nav-link:hover {
+  background-color: #f3f4f6;
+  color: #111827;
+}
+.nav-link.active {
+  background-color: #eff6ff;
+  color: #2563eb;
+  font-weight: 500;
+}
+
+/* Toast notifications */
+.toast {
+  min-width: 260px;
+  max-width: 380px;
+}
+.toast-success {
+  background-color: #f0fdf4;
+  border: 1px solid #bbf7d0;
+}
+.toast-error {
+  background-color: #fef2f2;
+  border: 1px solid #fecaca;
+}

@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+venv/
+.venv/
+*.egg-info/
+
+# Secrets — NEVER commit these
+.env
+credentials/credentials.json
+credentials/token.json
+data/
+
+# Build output
+build/
+dist/
+*.spec.bak
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+email_agent.log

@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Setup — Email Agent</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 min-h-screen flex items-center justify-center py-8">
+  <div class="w-full max-w-md">
+
+    <!-- Step indicator -->
+    <div class="flex items-center justify-center gap-2 mb-8">
+      {% for i in range(1, 5) %}
+        <div class="flex items-center gap-2">
+          <div class="w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold
+            {% if i == 3 %}bg-blue-600 text-white{% elif i < 3 %}bg-blue-200 text-blue-700{% else %}bg-gray-200 text-gray-500{% endif %}">
+            {% if i < 3 %}✓{% else %}{{ i }}{% endif %}
+          </div>
+          {% if i < 4 %}<div class="w-8 h-px {% if i < 3 %}bg-blue-300{% else %}bg-gray-300{% endif %}"></div>{% endif %}
+        </div>
+      {% endfor %}
+    </div>
+
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
+      <h1 class="text-xl font-semibold text-gray-900 mb-1">Your Signature</h1>
+      <p class="text-sm text-gray-500 mb-6">This will appear at the bottom of every email reply.</p>
+
+      {% if error %}
+        <div class="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">{{ error }}</div>
+      {% endif %}
+
+      <form method="POST" class="space-y-3">
+        <div class="grid grid-cols-2 gap-3">
+          <div class="col-span-2">
+            <label class="block text-xs font-medium text-gray-600 mb-1">Full Name <span class="text-red-500">*</span></label>
+            <input type="text" name="signature_name" value="{{ signature_name }}" placeholder="Jane Doe"
+              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" required>
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">Job Title</label>
+            <input type="text" name="signature_title" value="{{ signature_title }}" placeholder="Product Manager"
+              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">Company</label>
+            <input type="text" name="signature_company" value="{{ signature_company }}" placeholder="Acme Inc."
+              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+          </div>
+          <div class="col-span-2">
+            <label class="block text-xs font-medium text-gray-600 mb-1">Phone</label>
+            <input type="text" name="signature_phone" value="{{ signature_phone }}" placeholder="+1 (555) 000-0000"
+              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+          </div>
+          <div class="col-span-2">
+            <label class="block text-xs font-medium text-gray-600 mb-1">LinkedIn URL</label>
+            <input type="url" name="signature_linkedin" value="{{ signature_linkedin }}" placeholder="https://linkedin.com/in/yourhandle"
+              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">GitHub URL</label>
+            <input type="url" name="signature_github" value="{{ signature_github }}" placeholder="https://github.com/you"
+              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">Website URL</label>
+            <input type="url" name="signature_website" value="{{ signature_website }}" placeholder="https://yoursite.com"
+              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+          </div>
+        </div>
+        <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg text-sm transition-colors mt-2">
+          Continue →
+        </button>
+      </form>
+    </div>
+
+    <p class="text-center text-xs text-gray-400 mt-4">Step 3 of 4</p>
+  </div>
+</body>
+</html>
