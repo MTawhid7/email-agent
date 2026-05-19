@@ -386,3 +386,10 @@ This can happen if Gmail did not return a `Message-ID` header for the original e
 ### CSV bulk mode skips some rows with "missing email — skipped"
 
 The `email` column in the affected row is blank. Open your CSV, ensure every row has a valid email address, and re-run.
+
+---
+
+### Mac App displays Error -47 ("The application can't be opened")
+
+If you downloaded a new version of the `.zip` release, macOS Gatekeeper may block it because of a caching bug tied to the app name.
+**Fix:** Rename the `Email Agent.app` (e.g., to `Email Agent 2.app`) in Finder. When you launch it again, macOS will prompt you for permission in **System Settings > Privacy & Security**. After approving, the app will open normally.
