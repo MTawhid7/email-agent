@@ -30,10 +30,11 @@ jobs:
       - name: Build with PyInstaller
         run: pyinstaller email_agent.spec
 
-      - name: Zip the .app bundle
-        run: |
-          cd dist
-          zip -r "Email-Agent-Mac.zip" "Email Agent.app"
+      - name: Fix permissions on executable
+        run: chmod +x "dist/Email Agent.app/Contents/MacOS/Email Agent"
+
+      - name: Package .app with ditto (preserves permissions & resource forks)
+        run: ditto -c -k --sequesterRsrc --keepParent "dist/Email Agent.app" "dist/Email-Agent-Mac.zip"
 
       - name: Upload macOS artifact
         uses: actions/upload-artifact@v6
