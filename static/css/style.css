@@ -137,9 +137,12 @@ body {
 
 /* ── 3. Layout ────────────────────────────────────────────────────────────── */
 
+/*
+  Fixed-sidebar layout: sidebar is position:fixed (out of flow), so we use
+  the standard block + margin-left pattern rather than CSS grid.
+  .main is a block element that naturally fills the remaining viewport width.
+*/
 .app-shell {
-  display: grid;
-  grid-template-columns: var(--sidebar-width) 1fr;
   min-height: 100vh;
 }
 
@@ -297,6 +300,7 @@ body {
 }
 
 .page {
+  width: 100%;
   max-width: 900px;
   padding: var(--sp-8) var(--sp-8);
 }
