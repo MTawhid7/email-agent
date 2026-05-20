@@ -99,6 +99,20 @@ def step3():
         return redirect(url_for("setup.step4"))
 
     existing = load_config() if config_exists() else {}
+    social_links = list(existing.get("social_links") or [])
+    if not social_links:
+        import os
+        from dotenv import load_dotenv
+        load_dotenv()
+        for key, label in [
+            ("SIGNATURE_LINKEDIN", "LinkedIn"),
+            ("SIGNATURE_GITHUB", "GitHub"),
+            ("SIGNATURE_WEBSITE", "Website"),
+        ]:
+            val = os.getenv(key, "").strip()
+            if val:
+                social_links.append({"label": label, "url": val})
+
     return render_template(
         "setup/step3.html",
         error=None,
@@ -106,7 +120,7 @@ def step3():
         signature_title=existing.get("signature_title", ""),
         signature_company=existing.get("signature_company", ""),
         signature_phone=existing.get("signature_phone", ""),
-        social_links=existing.get("social_links", []),
+        social_links=social_links,
     )
 
 
@@ -118,7 +132,7 @@ def step4():
 
         if not persona:
             return render_template("setup/step4.html", error="Persona instructions are required.",
-                                   persona_prompt="", waiting=False)
+                                   persona_prompt=persona)
         try:
             poll_interval = int(poll_interval)
         except ValueError:
@@ -128,9 +142,8 @@ def step4():
             "persona_prompt": persona,
             "poll_interval_seconds": poll_interval,
         })
-
         start_oauth_thread()
-        return render_template("setup/step4.html", waiting=True, error=None, persona_prompt=persona)
+        return render_template("setup/step4.html", waiting=True, error=None)
 
     existing = load_config() if config_exists() else {}
     return render_template(
@@ -156,17 +169,12 @@ def _parse_social_links_from_form(form) -> list[dict]:
     """
     Extract social links from indexed form fields:
       social_label_0, social_url_0, social_label_1, social_url_1, ...
+    Handles sequence gaps or numbering discrepancies robustly.
     """
     links = []
-    i = 0
-    while True:
+    for i in range(30):
         label = form.get(f"social_label_{i}", "").strip()
         url = form.get(f"social_url_{i}", "").strip()
-        if not label and not url:
-            break
         if label and url:
             links.append({"label": label, "url": url})
-        i += 1
-        if i > 20:  # safety cap
-            break
     return links

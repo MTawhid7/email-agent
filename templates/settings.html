@@ -82,9 +82,9 @@
         <div id="links-container" style="display:flex;flex-direction:column;gap:var(--sp-2);">
           {% for link in config.get('social_links', []) %}
           <div class="link-row" style="display:flex;gap:var(--sp-2);align-items:center;">
-            <input type="text" name="social_label_{{ loop.index0 }}" value="{{ link.label }}"
+            <input type="text" name="social_label_{{ loop.index0 }}" value="{{ link['label'] }}"
               placeholder="Label" class="input" style="width:120px;">
-            <input type="url" name="social_url_{{ loop.index0 }}" value="{{ link.url }}"
+            <input type="url" name="social_url_{{ loop.index0 }}" value="{{ link['url'] }}"
               placeholder="https://…" class="input" style="flex:1;">
             <button type="button" onclick="removeSocialLink(this)"
               style="color:var(--text-tertiary);font-size:20px;line-height:1;background:none;border:none;cursor:pointer;padding:0 4px;"

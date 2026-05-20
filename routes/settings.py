@@ -51,4 +51,21 @@ def settings():
         flash("Settings saved successfully.", "success")
         return redirect(url_for("settings.settings"))
 
+    # GET request fallback to .env for social links if not set
+    if not existing.get("social_links"):
+        import os
+        from dotenv import load_dotenv
+        load_dotenv()
+        migrated = []
+        for key, label in [
+            ("SIGNATURE_LINKEDIN", "LinkedIn"),
+            ("SIGNATURE_GITHUB", "GitHub"),
+            ("SIGNATURE_WEBSITE", "Website"),
+        ]:
+            val = os.getenv(key, "").strip()
+            if val:
+                migrated.append({"label": label, "url": val})
+        if migrated:
+            existing["social_links"] = migrated
+
     return render_template("settings.html", config=existing)

@@ -32,7 +32,9 @@ The app packages as a native desktop application (`.app` on macOS, `.exe` on Win
 | **Attachment Summarisation** | PDFs and images summarised via Gemini Files API and injected into reply context |
 | **Bulk Send** | Generate personalised drafts for multiple recipients via CSV or manual entry |
 | **Contact Management** | Per-contact notes and tone preferences injected into every AI prompt |
-| **Social Link Icons** | Brand SVG icons (LinkedIn, WhatsApp, Instagram, etc.) rendered in email signature |
+| **Social Link Icons** | Brand icons (LinkedIn, GitHub, WhatsApp, etc.) in email signature via jsDelivr CDN |
+| **Knowledge Base** | Free-form facts injected into every AI prompt — prevents hallucinated phone numbers / contact details |
+| **Review Status Tracking** | Activity log reflects pending → sent / discarded state after user action |
 | **Desktop App** | Packaged as `.app` / `.exe` via PyInstaller — no terminal required for end users |
 
 ---
@@ -192,8 +194,9 @@ All settings are managed through the web UI (Settings page) and stored in:
 | Model | Gemini model name (default: `gemini-3.1-flash-lite`) |
 | Poll interval | How often the agent checks your inbox (seconds) |
 | Persona instructions | How the AI should write on your behalf |
+| Knowledge Base | Factual grounding — real phone, email, availability, company info |
 | Auto-translate | Detect incoming language and reply in the same language |
-| Signature | Name, title, company, phone, social links |
+| Signature | Name, title, company, phone, social links with brand icons |
 
 ---
 
@@ -222,6 +225,23 @@ The app is designed for team distribution. Each person uses their own Gmail acco
 | Frontend | [Alpine.js](https://alpinejs.dev/) (reactive stores), [Inter](https://rsms.me/inter/) font, custom CSS design system |
 | Packaging | [PyInstaller](https://pyinstaller.org/) + GitHub Actions |
 | Auth | OAuth 2.0 via `google-auth-oauthlib` |
+
+---
+
+## Development Workflow
+
+For rapid iteration during development, run the app directly from source — no build required:
+
+```bash
+cd "/path/to/Email Agent"
+git pull
+source venv/bin/activate
+python launcher.py
+```
+
+The browser opens to `http://localhost:5001` and uses the same data directory as the packaged app (`~/Library/Application Support/EmailAgent/` on macOS), so your config, token, and contacts are preserved between runs.
+
+**Build the `.app` / `.exe`** only when distributing a stable version to coworkers — not for every code change.
 
 ---
 
