@@ -1,44 +1,86 @@
+import base64
+import sys
+from pathlib import Path
+from urllib.parse import urlparse
+
 from config import Settings
 
-# ── Platform badge colours ─────────────────────────────────────────────────────
-# Inline SVG is stripped by all major email clients (Gmail, Outlook, Apple Mail).
-# Styled text badges are the universally supported email-safe alternative.
+# ── Icon path resolution ───────────────────────────────────────────────────────
+# Icons live in static/icons/{name}.svg, bundled by PyInstaller via
+# the 'static' data entry in email_agent.spec.
 
-_BADGE_COLOURS: dict[str, tuple[str, str]] = {
-    # label (lowercase) → (background, text colour)
-    "linkedin":  ("#0A66C2", "#ffffff"),
-    "whatsapp":  ("#25D366", "#ffffff"),
-    "instagram": ("#E4405F", "#ffffff"),
-    "twitter":   ("#000000", "#ffffff"),
-    "x":         ("#000000", "#ffffff"),
-    "facebook":  ("#1877F2", "#ffffff"),
-    "github":    ("#24292F", "#ffffff"),
-    "youtube":   ("#FF0000", "#ffffff"),
-    "tiktok":    ("#010101", "#ffffff"),
-    "website":   ("#6B7280", "#ffffff"),
-    "portfolio": ("#6B7280", "#ffffff"),
-    "blog":      ("#6B7280", "#ffffff"),
+def _icons_dir() -> Path:
+    if getattr(sys, "frozen", False):
+        return Path(sys._MEIPASS) / "static" / "icons"   # type: ignore[attr-defined]
+    return Path(__file__).parent.parent / "static" / "icons"
+
+
+def _load_icon_b64(name: str) -> str | None:
+    """Return base64-encoded SVG for the given platform, or None if not found."""
+    path = _icons_dir() / f"{name.lower().strip()}.svg"
+    if path.exists():
+        return base64.b64encode(path.read_bytes()).decode()
+    return None
+
+
+# ── Platform → domain mapping (Google favicon fallback) ───────────────────────
+# Used only when the local SVG file is missing.
+
+_PLATFORM_DOMAINS: dict[str, str | None] = {
+    "linkedin":  "linkedin.com",
+    "whatsapp":  "whatsapp.com",
+    "instagram": "instagram.com",
+    "twitter":   "twitter.com",
+    "x":         "x.com",
+    "facebook":  "facebook.com",
+    "github":    "github.com",
+    "youtube":   "youtube.com",
+    "tiktok":    "tiktok.com",
+    "telegram":  "telegram.org",
+    "discord":   "discord.com",
+    "snapchat":  "snapchat.com",
+    "website":   None,
+    "blog":      None,
+    "portfolio": None,
 }
 
-_DEFAULT_BADGE = ("#4B5563", "#ffffff")   # neutral dark for unknown platforms
+_GOOGLE_FAVICON = "https://www.google.com/s2/favicons?domain={domain}&sz=64"
 
 
-def _badge_html(label: str, url: str) -> str:
+def _fallback_img_url(label: str, url: str) -> str:
+    domain = _PLATFORM_DOMAINS.get(label.lower().strip())
+    if domain is None:
+        try:
+            parsed = urlparse(url)
+            domain = parsed.netloc or url
+        except Exception:
+            domain = url
+    return _GOOGLE_FAVICON.format(domain=domain)
+
+
+# ── Icon HTML builder ──────────────────────────────────────────────────────────
+
+def _icon_html(label: str, url: str) -> str:
     """
-    Build an email-safe styled link badge.
-    Uses only inline CSS properties supported by Outlook, Gmail, and Apple Mail.
+    Build an email-safe <img> icon link.
+    Priority: local bundled SVG (base64 data URI) → Google favicon URL fallback.
     """
-    bg, fg = _BADGE_COLOURS.get(label.lower().strip(), _DEFAULT_BADGE)
+    b64 = _load_icon_b64(label)
+    if b64:
+        src = f"data:image/svg+xml;base64,{b64}"
+    else:
+        src = _fallback_img_url(label, url)
+
     return (
         f'<a href="{url}" title="{label}" target="_blank" rel="noopener noreferrer" '
-        f'style="display:inline-block;padding:3px 10px;margin:0 4px 4px 0;'
-        f'background-color:{bg};color:{fg};text-decoration:none;'
-        f'font-family:Arial,Helvetica,sans-serif;font-size:11px;font-weight:bold;'
-        f'border-radius:3px;mso-padding-alt:3px 10px;">'   # mso- prefix for Outlook
-        f'{label}'
+        f'style="display:inline-block;margin:0 6px 4px 0;text-decoration:none;">'
+        f'<img src="{src}" width="28" height="28" alt="{label}" '
+        f'style="display:block;border-radius:5px;border:0;" />'
         f'</a>'
     )
 
+
+# ── SignatureBuilder ───────────────────────────────────────────────────────────
 
 class SignatureBuilder:
     def __init__(self, settings: Settings) -> None:
@@ -61,11 +103,11 @@ class SignatureBuilder:
             lines.append(s.signature_phone)
 
         if s.social_links:
-            badges = "".join(
-                _badge_html(link["label"], link["url"])
+            icons = "".join(
+                _icon_html(link["label"], link["url"])
                 for link in s.social_links
             )
-            lines.append(badges)
+            lines.append(icons)
 
         inner = "<br>\n".join(lines)
         return f"\n<br><hr>\n<p>\n{inner}\n</p>"
