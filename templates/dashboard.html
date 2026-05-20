@@ -118,7 +118,11 @@
 <div class="card">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--sp-4);">
     <div style="font-size:var(--text-md);font-weight:600;color:var(--text-primary);">Activity Log</div>
-    <div style="font-size:var(--text-xs);color:var(--text-tertiary);">Auto-refreshes every 5 s</div>
+    <div style="font-size:var(--text-xs);color:var(--text-tertiary);text-align:right;line-height:1.6;">
+      Dashboard updates every 5 s<br>
+      Agent polls inbox every
+      <span x-text="Math.round($store.agent.pollInterval / 60)">5</span> min
+    </div>
   </div>
 
   <div class="log-container" id="log-container"

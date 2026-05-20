@@ -36,6 +36,16 @@
     </div>
   </div>
 
+  {# ── Knowledge Base ───────────────────────────────────────────────────── #}
+  <div class="card card-lg">
+    <div class="card-section-title">Knowledge Base</div>
+    {{ textarea_field('context_facts', 'Your Facts',
+        value=config.get('context_facts',''),
+        rows=6,
+        placeholder='My real phone number is +880...\nI am available Mon–Fri 9am–6pm BST (UTC+6)\nMy email address is you@example.com\nI work at [Company] as [Role]\nCompany website: https://...',
+        hint='Facts the AI will always treat as accurate — phone numbers, email, availability, company details. One fact per line. Prevents the AI from hallucinating contact information.') }}
+  </div>
+
   {# ── Signature ─────────────────────────────────────────────────────────── #}
   <div class="card card-lg">
     <div class="card-section-title">Email Signature</div>

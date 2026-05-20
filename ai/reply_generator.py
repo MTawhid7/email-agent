@@ -21,7 +21,8 @@ class ReplyGenerator:
         self._client = genai.Client(api_key=settings.gemini_api_key)
         self._model = settings.gemini_model
         auto_translate = getattr(settings, "auto_translate", False)
-        self._system_prompt = build_system_prompt(settings.persona_prompt, auto_translate)
+        context_facts = getattr(settings, "context_facts", "")
+        self._system_prompt = build_system_prompt(settings.persona_prompt, auto_translate, context_facts)
 
     def generate(self, user_message: str) -> str:
         """Generate an email body. Retries on rate limit."""

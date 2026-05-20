@@ -21,6 +21,7 @@ class Settings:
     # Dynamic list of {"label": str, "url": str} dicts — replaces fixed social fields
     social_links: tuple
     auto_translate: bool = False
+    context_facts: str = ""    # factual grounding — injected into AI system prompt
 
 
 def _require(key: str) -> str:
@@ -95,6 +96,7 @@ def load_settings_from_dict(data: dict) -> Settings:
         signature_phone=optional("signature_phone"),
         social_links=_parse_social_links(data),
         auto_translate=str(data.get("auto_translate", "false")).lower() in ("true", "1", "yes"),
+        context_facts=optional("context_facts"),
     )
 
 

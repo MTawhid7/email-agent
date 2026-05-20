@@ -9,13 +9,14 @@ document.addEventListener('alpine:init', () => {
   /* ── agentStore ──────────────────────────────────────────────────────────── */
   Alpine.store('agent', {
     // Reactive state
-    running:       false,
-    logs:          [],
-    draftCount:    0,
-    reviewCount:   0,
-    error:         null,
-    isReconnecting: false,
-    toggling:      false,   // true while toggle API call is in-flight
+    running:          false,
+    logs:             [],
+    draftCount:       0,
+    reviewCount:      0,
+    error:            null,
+    isReconnecting:   false,
+    toggling:         false,   // true while toggle API call is in-flight
+    pollInterval:     300,     // seconds between inbox polls (from config)
 
     // Computed: plain functions so Alpine reactive proxy tracks them reliably
     get isAuthError() {
@@ -44,11 +45,12 @@ document.addEventListener('alpine:init', () => {
         const res = await fetch('/api/status');
         if (!res.ok) return;
         const data = await res.json();
-        this.running     = data.running    ?? false;
-        this.logs        = data.logs       ?? [];
-        this.draftCount  = data.draft_count ?? 0;
-        this.reviewCount = data.review_count ?? 0;
-        this.error       = data.error      ?? null;
+        this.running      = data.running             ?? false;
+        this.logs         = data.logs                ?? [];
+        this.draftCount   = data.draft_count         ?? 0;
+        this.reviewCount  = data.review_count        ?? 0;
+        this.error        = data.error               ?? null;
+        this.pollInterval = data.poll_interval_seconds ?? 300;
       } catch (_) {
         // Server unreachable — stay silent, retry on next interval
       }

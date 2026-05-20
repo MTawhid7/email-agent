@@ -15,14 +15,32 @@ Rules:
 - Output the email body ONLY. No greeting line. No signature. No subject line.
 - Be concise. Do not pad the response.
 - Address the recipient by their first name only in the body if needed (not as a greeting).
-{extra_rules}"""
+{extra_rules}
+{facts_block}"""
 
 
-def build_system_prompt(persona_text: str, auto_translate: bool = False) -> str:
+def build_system_prompt(
+    persona_text: str,
+    auto_translate: bool = False,
+    context_facts: str = "",
+) -> str:
     extra = ""
     if auto_translate:
         extra = "- Detect the language of the incoming email and write your reply in that same language."
-    return _SYSTEM_WRAPPER.format(persona=persona_text.strip(), extra_rules=extra).strip()
+
+    facts_block = ""
+    if context_facts.strip():
+        facts_block = (
+            "Facts about you that are ALWAYS true — treat these as ground truth, "
+            "never hallucinate alternatives:\n"
+            + context_facts.strip()
+        )
+
+    return _SYSTEM_WRAPPER.format(
+        persona=persona_text.strip(),
+        extra_rules=extra,
+        facts_block=facts_block,
+    ).strip()
 
 
 def build_user_message(
