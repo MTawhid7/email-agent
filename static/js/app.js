@@ -69,24 +69,13 @@ document.addEventListener('alpine:init', () => {
         return;
       }
 
-      // Fast-poll for 8 s after toggling so errors surface immediately
-      // rather than waiting for the next 5-second cycle.
-      let polls = 0;
-      const fastPoll = setInterval(async () => {
-        await this.refresh();
-        polls++;
-        if (polls >= 16) {          // 16 × 500 ms = 8 s
-          clearInterval(fastPoll);
-          this.toggling = false;
-        }
-        // Stop fast-poll early once state has settled
-        if (!this.toggling) {
-          clearInterval(fastPoll);
-        } else if (polls >= 2 && (this.error || this.running !== (endpoint === '/api/agent/stop'))) {
-          clearInterval(fastPoll);
-          this.toggling = false;
-        }
-      }, 500);
+      // Poll three times at short intervals so errors surface quickly.
+      // toggling is ALWAYS released at the end — no complex exit conditions.
+      const sleep = ms => new Promise(r => setTimeout(r, ms));
+      await sleep(600);  await this.refresh();
+      await sleep(600);  await this.refresh();
+      await sleep(800);  await this.refresh();
+      this.toggling = false;
     },
 
     async reconnect() {

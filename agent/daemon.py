@@ -115,7 +115,11 @@ class AgentDaemon:
     def _build_components(self):
         raw = load_config()
         settings = load_settings_from_dict(raw)
-        creds = get_credentials(credentials_path=get_credentials_path(), token_path=get_token_path())
+        creds = get_credentials(
+            credentials_path=get_credentials_path(),
+            token_path=get_token_path(),
+            allow_oauth_flow=False,   # never block the daemon thread waiting for a browser
+        )
         gmail = GmailClient(creds)
         generator = ReplyGenerator(settings)
         contact_store = ContactStore(path=get_contacts_path())
