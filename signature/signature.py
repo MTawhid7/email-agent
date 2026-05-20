@@ -1,82 +1,67 @@
-import base64
-import sys
-from pathlib import Path
 from urllib.parse import urlparse
 
 from config import Settings
 
-# ── Icon path resolution ───────────────────────────────────────────────────────
-# Icons live in static/icons/{name}.svg, bundled by PyInstaller via
-# the 'static' data entry in email_agent.spec.
+# ── Icon delivery ──────────────────────────────────────────────────────────────
+#
+# Gmail (and most web clients) block ALL data: URIs and inline SVG in emails.
+# The only universally supported method is externally hosted HTTPS PNG images.
+#
+# We serve our branded icons from jsDelivr CDN backed by this public GitHub repo.
+# jsDelivr is purpose-built for serving static assets from GitHub repos with
+# global CDN caching — the exact approach used by Wisestamp, Exclaimer, etc.
+#
+# URL pattern: https://cdn.jsdelivr.net/gh/{owner}/{repo}@{branch}/path/to/file
 
-def _icons_dir() -> Path:
-    if getattr(sys, "frozen", False):
-        return Path(sys._MEIPASS) / "static" / "icons"   # type: ignore[attr-defined]
-    return Path(__file__).parent.parent / "static" / "icons"
+_JSDELIVR_BASE = "https://cdn.jsdelivr.net/gh/MTawhid7/email-agent@main/static/icons"
 
+# Platform slugs that have a bundled PNG in static/icons/
+_BUNDLED_ICONS = frozenset({
+    "linkedin", "whatsapp", "instagram", "twitter", "x",
+    "facebook", "github", "youtube", "tiktok", "telegram", "discord",
+})
 
-def _load_icon_b64(name: str) -> tuple[str, str] | None:
-    """
-    Return (mime_type, base64_data) for the given platform icon, or None.
-    Prefers PNG (email-safe) over SVG.
-    """
-    key = name.lower().strip()
-    for ext, mime in ((".png", "image/png"), (".svg", "image/svg+xml")):
-        path = _icons_dir() / f"{key}{ext}"
-        if path.exists():
-            return mime, base64.b64encode(path.read_bytes()).decode()
-    return None
+# Google favicon service — fallback for unknown/custom platform labels
+_GOOGLE_FAVICON = "https://www.google.com/s2/favicons?domain={domain}&sz=64"
 
-
-# ── Platform → domain mapping (Google favicon fallback) ───────────────────────
-# Used only when the local SVG file is missing.
-
+# Known platform → canonical domain (for Google favicon fallback)
 _PLATFORM_DOMAINS: dict[str, str | None] = {
-    "linkedin":  "linkedin.com",
-    "whatsapp":  "whatsapp.com",
-    "instagram": "instagram.com",
-    "twitter":   "twitter.com",
-    "x":         "x.com",
-    "facebook":  "facebook.com",
-    "github":    "github.com",
-    "youtube":   "youtube.com",
-    "tiktok":    "tiktok.com",
-    "telegram":  "telegram.org",
-    "discord":   "discord.com",
     "snapchat":  "snapchat.com",
+    "pinterest": "pinterest.com",
+    "reddit":    "reddit.com",
     "website":   None,
     "blog":      None,
     "portfolio": None,
 }
 
-_GOOGLE_FAVICON = "https://www.google.com/s2/favicons?domain={domain}&sz=64"
 
+def _icon_src(label: str, link_url: str) -> str:
+    """
+    Return the best HTTPS URL for a social platform icon.
+    1. Bundled PNG via jsDelivr CDN (known platforms)
+    2. Google favicon service (unknown labels — uses the link's own domain)
+    """
+    key = label.lower().strip()
 
-def _fallback_img_url(label: str, url: str) -> str:
-    domain = _PLATFORM_DOMAINS.get(label.lower().strip())
+    if key in _BUNDLED_ICONS:
+        return f"{_JSDELIVR_BASE}/{key}.png"
+
+    # Try Google favicon with known domain mapping first
+    domain = _PLATFORM_DOMAINS.get(key)
     if domain is None:
+        # Extract domain from the supplied URL
         try:
-            parsed = urlparse(url)
-            domain = parsed.netloc or url
+            parsed = urlparse(link_url)
+            domain = parsed.netloc or link_url
         except Exception:
-            domain = url
+            domain = link_url
+
     return _GOOGLE_FAVICON.format(domain=domain)
 
 
-# ── Icon HTML builder ──────────────────────────────────────────────────────────
-
 def _icon_html(label: str, url: str) -> str:
-    """
-    Build an email-safe <img> icon link.
-    Priority: local bundled SVG (base64 data URI) → Google favicon URL fallback.
-    """
-    result = _load_icon_b64(label)
-    if result:
-        mime, b64 = result
-        src = f"data:{mime};base64,{b64}"
-    else:
-        src = _fallback_img_url(label, url)
-
+    """Build an email-safe icon link using an externally hosted HTTPS PNG."""
+    src = _icon_src(label, url)
     return (
         f'<a href="{url}" title="{label}" target="_blank" rel="noopener noreferrer" '
         f'style="display:inline-block;margin:0 6px 4px 0;text-decoration:none;">'

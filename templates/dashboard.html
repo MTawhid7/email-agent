@@ -3,11 +3,6 @@
 {% block title %}Dashboard — Email Agent{% endblock %}
 
 {% block content %}
-{#
-  Uses the global agentStore ($store.agent) and reviewStore ($store.review)
-  registered in app.js via the alpine:init event.
-  No x-init needed — Alpine auto-calls init() on stores.
-#}
 
 {{ page_header('Dashboard') }}
 
@@ -22,10 +17,10 @@
         <div style="font-size:var(--text-body);font-weight:600;color:var(--text-primary);"
           x-text="$store.agent.statusLabel">Stopped</div>
         <div style="font-size:var(--text-sm);color:var(--text-tertiary);">
-          <span x-text="$store.agent.draftCount">0</span> queued today
+          <span x-text="$store.agent.draftCount">0</span> replies queued today
           <template x-if="$store.review.count > 0">
             <span> · <a href="/review" style="color:var(--accent);text-decoration:none;">
-              <span x-text="$store.review.count"></span> pending review
+              <span x-text="$store.review.count"></span> awaiting review
             </a></span>
           </template>
         </div>
@@ -35,7 +30,6 @@
     {# Action buttons #}
     <div style="display:flex;align-items:center;gap:var(--sp-2);">
 
-      {# Re-connect Gmail — only when auth error and not already reconnecting #}
       <template x-if="$store.agent.isAuthError && !$store.agent.isReconnecting">
         <button @click="$store.agent.reconnect()" class="btn btn-secondary"
           style="border-color:var(--status-warning);color:var(--status-warning);">
@@ -48,7 +42,6 @@
         </button>
       </template>
 
-      {# Reconnecting spinner #}
       <template x-if="$store.agent.isReconnecting">
         <span style="display:flex;align-items:center;gap:var(--sp-2);font-size:var(--text-sm);color:var(--text-secondary);">
           <svg class="spin" width="14" height="14" fill="none" stroke="currentColor"
@@ -60,14 +53,12 @@
         </span>
       </template>
 
-      {# Start / Stop toggle #}
       <button
         class="btn btn-agent"
         :class="$store.agent.running ? 'btn-agent--stop' : 'btn-agent--start'"
         :disabled="$store.agent.isReconnecting || $store.agent.toggling"
         @click="$store.agent.toggle()"
-        aria-live="polite"
-      >
+        aria-live="polite">
         <template x-if="$store.agent.toggling">
           <svg class="spin" width="14" height="14" fill="none" stroke="currentColor"
             stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
@@ -79,7 +70,6 @@
           Start Agent
         </span>
       </button>
-
     </div>
   </div>
 
@@ -93,12 +83,11 @@
             d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
         </svg>
         <span><strong>Gmail access expired.</strong>
-          Click <em>Re-connect Gmail</em> — a browser window will open for a quick Google sign-in.</span>
+          Click <em>Re-connect Gmail</em> to sign in again — takes 30 seconds.</span>
       </div>
     </div>
   </template>
 
-  {# General error (non-auth) #}
   <template x-if="$store.agent.error && !$store.agent.isAuthError">
     <div style="margin-top:var(--sp-4);">
       <div class="alert alert-error">
@@ -111,47 +100,140 @@
       </div>
     </div>
   </template>
-
 </div>
 
-{# ── Activity log ────────────────────────────────────────────────────────────── #}
+{# ── Activity feed ───────────────────────────────────────────────────────────── #}
 <div class="card">
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--sp-4);">
-    <div style="font-size:var(--text-md);font-weight:600;color:var(--text-primary);">Activity Log</div>
-    <div style="font-size:var(--text-xs);color:var(--text-tertiary);text-align:right;line-height:1.6;">
-      Dashboard updates every 5 s<br>
-      Agent polls inbox every
-      <span x-text="Math.round($store.agent.pollInterval / 60)">5</span> min
-    </div>
+  <div style="margin-bottom:var(--sp-4);">
+    <div style="font-size:var(--text-md);font-weight:600;color:var(--text-primary);">Recent Activity</div>
   </div>
 
-  <div class="log-container" id="log-container"
-    role="log" aria-live="polite" aria-label="Agent activity log">
+  <div id="activity-feed" role="log" aria-live="polite" aria-label="Agent activity">
 
-    <template x-if="$store.agent.logs.length === 0">
-      <div style="text-align:center;padding:var(--sp-8) 0;
-        color:var(--text-tertiary);font-size:var(--text-md);font-family:var(--font);">
-        No activity yet. Start the agent to begin.
+    <template x-if="$store.agent.logs.filter(e => e.level !== 'info' || e.message !== 'No new emails.').length === 0">
+      <div style="text-align:center;padding:var(--sp-10) 0;color:var(--text-tertiary);">
+        <svg width="36" height="36" fill="none" stroke="currentColor" stroke-width="1.5"
+          viewBox="0 0 24 24" style="margin:0 auto var(--sp-3);display:block;opacity:0.35;">
+          <path stroke-linecap="round" stroke-linejoin="round"
+            d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75"/>
+        </svg>
+        <p style="font-size:var(--text-md);font-weight:500;color:var(--text-secondary);">No activity yet</p>
+        <p style="font-size:var(--text-sm);margin-top:4px;">Start the agent to begin processing emails.</p>
       </div>
     </template>
 
-    <template x-for="(entry, idx) in $store.agent.logs" :key="idx">
-      <div class="log-entry">
-        <span class="log-time" x-text="entry.timestamp"></span>
-        <div>
-          <span :class="{
-              'log-msg--success': entry.level === 'success',
-              'log-msg--error':   entry.level === 'error',
-              'log-msg--info':    entry.level === 'info'
-            }"
-            x-text="entry.message">
-          </span>
-          <div class="log-summary" x-show="entry.summary" x-text="entry.summary"></div>
+    <template x-for="(entry, idx) in $store.agent.logs.filter(e => e.level !== 'info' || e.message !== 'No new emails.')" :key="idx">
+      <div class="activity-row" :data-level="entry.level">
+
+        {# Left: icon circle #}
+        <div class="activity-icon"
+          :style="entry.level === 'success' ? 'background:var(--status-success-light);color:#065f46;'
+                : entry.level === 'error'   ? 'background:var(--status-error-light);color:#9a3412;'
+                : 'background:var(--bg-elevated);color:var(--text-tertiary);'">
+          <template x-if="entry.level === 'success'">
+            <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"
+              viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+          </template>
+          <template x-if="entry.level === 'error'">
+            <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"
+              viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+          </template>
+          <template x-if="entry.level === 'info' && entry.message.includes('started')">
+            <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"
+              viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z"/></svg>
+          </template>
+          <template x-if="entry.level === 'info' && entry.message.includes('stopped')">
+            <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"
+              viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1" stroke-linecap="round"/></svg>
+          </template>
+          <template x-if="entry.level === 'info' && !entry.message.includes('started') && !entry.message.includes('stopped')">
+            <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"
+              viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5"/></svg>
+          </template>
         </div>
+
+        {# Centre: friendly message + optional summary #}
+        <div style="flex:1;min-width:0;">
+          <div class="activity-title" x-text="friendlyMessage(entry.message)"></div>
+          <div class="activity-summary" x-show="entry.summary" x-text="entry.summary"></div>
+        </div>
+
+        {# Right: time (HH:MM only) #}
+        <div class="activity-time" x-text="entry.timestamp.slice(11,16)"></div>
+
       </div>
     </template>
 
   </div>
 </div>
 
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Convert technical log messages to human-friendly text
+function friendlyMessage(msg) {
+  if (!msg) return msg;
+  // Strip leading emoji priority codes
+  msg = msg.replace(/^[🔴🟡⚪⏭]\s*/u, '');
+  // Queued for review: Name <email>
+  msg = msg.replace(/^Queued for review:\s*(.+?)\s*<[^>]+>$/, 'Reply ready for $1');
+  // Skipped (reason): Name
+  msg = msg.replace(/^Skipped \(([^)]+)\):\s*(.+)$/, (_, reason, name) => {
+    if (/newsletter|marketing|promo|notif/i.test(reason)) return 'Skipped automated email';
+    return 'Skipped · ' + name;
+  });
+  // Agent lifecycle
+  if (msg === 'Agent started.') return 'Agent started';
+  if (msg === 'Agent stopped.') return 'Agent stopped';
+  // Auth / startup errors → friendlier
+  msg = msg.replace(/^Auth error:\s*/i, 'Gmail disconnected — ');
+  msg = msg.replace(/^Startup failed:\s*/i, 'Could not start — ');
+  msg = msg.replace(/^Skipping thread \S+:\s*/i, 'Skipped one email — ');
+  msg = msg.replace(/^Unexpected error on thread \S+:\s*/i, 'Unexpected issue — ');
+  return msg;
+}
+</script>
+
+<style>
+.activity-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.activity-row:last-child { border-bottom: none; }
+
+.activity-icon {
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.activity-title {
+  font-size: var(--text-md);
+  font-weight: 500;
+  color: var(--text-primary);
+  line-height: 1.4;
+}
+
+.activity-summary {
+  font-size: var(--text-sm);
+  color: var(--text-tertiary);
+  margin-top: 2px;
+  line-height: 1.4;
+}
+
+.activity-time {
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+  white-space: nowrap;
+  padding-top: 3px;
+  flex-shrink: 0;
+}
+</style>
 {% endblock %}
