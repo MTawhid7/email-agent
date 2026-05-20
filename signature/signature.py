@@ -15,11 +15,16 @@ def _icons_dir() -> Path:
     return Path(__file__).parent.parent / "static" / "icons"
 
 
-def _load_icon_b64(name: str) -> str | None:
-    """Return base64-encoded SVG for the given platform, or None if not found."""
-    path = _icons_dir() / f"{name.lower().strip()}.svg"
-    if path.exists():
-        return base64.b64encode(path.read_bytes()).decode()
+def _load_icon_b64(name: str) -> tuple[str, str] | None:
+    """
+    Return (mime_type, base64_data) for the given platform icon, or None.
+    Prefers PNG (email-safe) over SVG.
+    """
+    key = name.lower().strip()
+    for ext, mime in ((".png", "image/png"), (".svg", "image/svg+xml")):
+        path = _icons_dir() / f"{key}{ext}"
+        if path.exists():
+            return mime, base64.b64encode(path.read_bytes()).decode()
     return None
 
 
@@ -65,9 +70,10 @@ def _icon_html(label: str, url: str) -> str:
     Build an email-safe <img> icon link.
     Priority: local bundled SVG (base64 data URI) → Google favicon URL fallback.
     """
-    b64 = _load_icon_b64(label)
-    if b64:
-        src = f"data:image/svg+xml;base64,{b64}"
+    result = _load_icon_b64(label)
+    if result:
+        mime, b64 = result
+        src = f"data:{mime};base64,{b64}"
     else:
         src = _fallback_img_url(label, url)
 
