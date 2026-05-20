@@ -53,12 +53,12 @@ class AgentDaemon:
             self._error = None
             self._thread = threading.Thread(target=self._run_loop, name="AgentDaemon", daemon=True)
             self._thread.start()
-            self._append_log("info", "Agent started.")
+        # _append_log called OUTSIDE the lock — it acquires its own lock internally
+        self._append_log("info", "Agent started.")
 
     def stop(self) -> None:
         self._stop_event.set()
-        with self._lock:
-            self._append_log("info", "Agent stopped.")
+        self._append_log("info", "Agent stopped.")
 
     @property
     def is_running(self) -> bool:
@@ -231,8 +231,9 @@ class AgentDaemon:
             "summary": summary,
             "priority": priority,
         }
-        with self._lock:
-            self._logs.append(entry)
+        # deque.append() is thread-safe — no lock needed.
+        # Never call this while holding self._lock (threading.Lock is not reentrant).
+        self._logs.append(entry)
         getattr(logger, "info" if level in ("info", "success") else level, logger.info)(message)
 
     def _set_error(self, message: str) -> None:
