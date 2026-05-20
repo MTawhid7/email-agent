@@ -1,23 +1,41 @@
 /* ─────────────────────────────────────────────────────────────────────────────
    Email Agent — Alpine.js Stores & Shared Utilities
+   app.js is loaded with `defer` BEFORE Alpine in <head> so the alpine:init
+   listener is always registered before Alpine fires it, even when cached.
    ───────────────────────────────────────────────────────────────────────────── */
 
 document.addEventListener('alpine:init', () => {
 
-  /* ── agentStore: dashboard status, log, reconnect ── */
+  /* ── agentStore ──────────────────────────────────────────────────────────── */
   Alpine.store('agent', {
-    running: false,
-    logs: [],
-    draftCount: 0,
-    reviewCount: 0,
-    error: null,
+    // Reactive state
+    running:       false,
+    logs:          [],
+    draftCount:    0,
+    reviewCount:   0,
+    error:         null,
     isReconnecting: false,
-    lastLogCount: 0,
-    _pollTimer: null,
+    toggling:      false,   // true while toggle API call is in-flight
 
+    // Computed: plain functions so Alpine reactive proxy tracks them reliably
+    get isAuthError() {
+      return Boolean(this.error && /auth|token|credential|expired/i.test(this.error));
+    },
+    get statusLabel() {
+      if (this.isReconnecting) return 'Reconnecting…';
+      if (this.isAuthError)    return 'Gmail disconnected';
+      return this.running ? 'Running' : 'Stopped';
+    },
+    get statusDotClass() {
+      if (this.isReconnecting) return 'status-dot--warning';
+      if (this.isAuthError)    return 'status-dot--error';
+      return this.running ? 'status-dot--running' : 'status-dot--stopped';
+    },
+
+    // Lifecycle — Alpine auto-calls init() when the store is registered
     init() {
       this.refresh();
-      this._pollTimer = setInterval(() => this.refresh(), 5000);
+      setInterval(() => this.refresh(), 5000);
     },
 
     async refresh() {
@@ -26,18 +44,49 @@ document.addEventListener('alpine:init', () => {
         const res = await fetch('/api/status');
         if (!res.ok) return;
         const data = await res.json();
-        this.running    = data.running;
-        this.logs       = data.logs ?? [];
-        this.draftCount = data.draft_count ?? 0;
+        this.running     = data.running    ?? false;
+        this.logs        = data.logs       ?? [];
+        this.draftCount  = data.draft_count ?? 0;
         this.reviewCount = data.review_count ?? 0;
-        this.error      = data.error ?? null;
-      } catch (_) { /* network unavailable — stay silent */ }
+        this.error       = data.error      ?? null;
+      } catch (_) {
+        // Server unreachable — stay silent, retry on next interval
+      }
     },
 
     async toggle() {
+      if (this.toggling) return;
+      this.toggling = true;
+      this.error = null;
+
       const endpoint = this.running ? '/api/agent/stop' : '/api/agent/start';
-      await fetch(endpoint, { method: 'POST' });
-      await this.refresh();
+      try {
+        const res = await fetch(endpoint, { method: 'POST' });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      } catch (e) {
+        showToast('Request failed: ' + e.message, 'error');
+        this.toggling = false;
+        return;
+      }
+
+      // Fast-poll for 8 s after toggling so errors surface immediately
+      // rather than waiting for the next 5-second cycle.
+      let polls = 0;
+      const fastPoll = setInterval(async () => {
+        await this.refresh();
+        polls++;
+        if (polls >= 16) {          // 16 × 500 ms = 8 s
+          clearInterval(fastPoll);
+          this.toggling = false;
+        }
+        // Stop fast-poll early once state has settled
+        if (!this.toggling) {
+          clearInterval(fastPoll);
+        } else if (polls >= 2 && (this.error || this.running !== (endpoint === '/api/agent/stop'))) {
+          clearInterval(fastPoll);
+          this.toggling = false;
+        }
+      }, 500);
     },
 
     async reconnect() {
@@ -48,14 +97,14 @@ document.addEventListener('alpine:init', () => {
         this._pollOAuth();
       } catch (e) {
         this.isReconnecting = false;
-        showToast('Reconnect failed. Try again.', 'error');
+        showToast('Reconnect request failed. Try again.', 'error');
       }
     },
 
     _pollOAuth() {
       const t = setInterval(async () => {
         try {
-          const res = await fetch('/setup/api/oauth_status');
+          const res  = await fetch('/setup/api/oauth_status');
           const data = await res.json();
           if (data.done) {
             clearInterval(t);
@@ -71,37 +120,20 @@ document.addEventListener('alpine:init', () => {
         } catch (_) { /* retry next tick */ }
       }, 2000);
     },
-
-    get isAuthError() {
-      return this.error && /auth|token|credential|expired/i.test(this.error);
-    },
-
-    get statusLabel() {
-      if (this.isReconnecting) return 'Reconnecting…';
-      if (this.isAuthError)    return 'Gmail disconnected';
-      return this.running ? 'Running' : 'Stopped';
-    },
-
-    get statusDotClass() {
-      if (this.isReconnecting) return 'status-dot--warning';
-      if (this.isAuthError)    return 'status-dot--error';
-      return this.running ? 'status-dot--running' : 'status-dot--stopped';
-    },
   });
 
-  /* ── reviewStore: sidebar badge count ── */
+  /* ── reviewStore ─────────────────────────────────────────────────────────── */
   Alpine.store('review', {
     count: 0,
-    _timer: null,
 
     init() {
       this.refresh();
-      this._timer = setInterval(() => this.refresh(), 8000);
+      setInterval(() => this.refresh(), 8000);
     },
 
     async refresh() {
       try {
-        const res = await fetch('/api/review/count');
+        const res  = await fetch('/api/review/count');
         if (!res.ok) return;
         const data = await res.json();
         this.count = data.count ?? 0;
@@ -111,7 +143,10 @@ document.addEventListener('alpine:init', () => {
 
 });
 
-/* ── showToast: global toast notification ── */
+/* ── showToast ───────────────────────────────────────────────────────────────
+   Global toast notification. Can be called from anywhere including Alpine
+   event handlers and Jinja templates.
+   ─────────────────────────────────────────────────────────────────────────── */
 function showToast(message, type = 'info') {
   const container = document.getElementById('toast-container')
     || (() => {
@@ -122,47 +157,51 @@ function showToast(message, type = 'info') {
       return el;
     })();
 
-  const toast = document.createElement('div');
-  const iconMap = {
+  const icons = {
     success: `<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>`,
     error:   `<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>`,
-    info:    `<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>`,
+    info:    `<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path stroke-linecap="round" d="M12 8v4m0 4h.01"/></svg>`,
   };
+
+  const toast = document.createElement('div');
   toast.className = `toast toast--${type}`;
-  toast.innerHTML = (iconMap[type] || iconMap.info) + `<span>${message}</span>`;
+  toast.innerHTML = (icons[type] || icons.info) + `<span>${message}</span>`;
   container.appendChild(toast);
 
   setTimeout(() => {
     toast.style.transition = 'opacity 200ms ease, transform 200ms ease';
-    toast.style.opacity = '0';
-    toast.style.transform = 'translateX(8px)';
+    toast.style.opacity    = '0';
+    toast.style.transform  = 'translateX(8px)';
     setTimeout(() => toast.remove(), 220);
   }, 3800);
 }
 
-/* ── captureEditableBody: capture contenteditable HTML before form submit ── */
-function captureEditableBody(form, itemId, action) {
+/* ── captureEditableBody ─────────────────────────────────────────────────────
+   Copies innerHTML of a contenteditable div into a hidden form input before
+   the review form submits.
+   ─────────────────────────────────────────────────────────────────────────── */
+function captureEditableBody(form, itemId) {
   const editable = document.getElementById('body-' + itemId);
   const hidden   = form.querySelector('input[name="body_html"]');
   if (editable && hidden) hidden.value = editable.innerHTML;
 }
 
-/* ── Social link builder for setup/settings ── */
+/* ── Social link builder (setup/settings) ───────────────────────────────────── */
 function addSocialLink(label = '', urlPrefix = '') {
   const container = document.getElementById('links-container');
   if (!container) return;
   const idx = container.querySelectorAll('.link-row').length;
   const row = document.createElement('div');
-  row.className = 'link-row flex-gap-2';
+  row.className = 'link-row';
   row.style.cssText = 'display:flex;gap:8px;align-items:center;';
   row.innerHTML = `
-    <input type="text" name="social_label_${idx}" value="${label}"
+    <input type="text"  name="social_label_${idx}" value="${label}"
       placeholder="Label" class="input" style="width:120px;">
-    <input type="url" name="social_url_${idx}" value="${urlPrefix}"
+    <input type="url"   name="social_url_${idx}"   value="${urlPrefix}"
       placeholder="https://…" class="input" style="flex:1;">
     <button type="button" onclick="removeSocialLink(this)"
-      style="color:var(--text-tertiary);font-size:20px;line-height:1;background:none;border:none;cursor:pointer;padding:0 4px;"
-      aria-label="Remove">×</button>`;
+      style="color:var(--text-tertiary);font-size:20px;line-height:1;background:none;
+             border:none;cursor:pointer;padding:0 4px;" aria-label="Remove">×</button>`;
   container.appendChild(row);
   row.querySelector('input[type="url"]').focus();
   renumberSocialLinks();
@@ -175,9 +214,9 @@ function removeSocialLink(btn) {
 
 function renumberSocialLinks() {
   document.querySelectorAll('.link-row').forEach((row, i) => {
-    const label = row.querySelector('input[name^="social_label"]');
-    const url   = row.querySelector('input[name^="social_url"]');
-    if (label) label.name = `social_label_${i}`;
-    if (url)   url.name   = `social_url_${i}`;
+    const lbl = row.querySelector('input[name^="social_label"]');
+    const url = row.querySelector('input[name^="social_url"]');
+    if (lbl) lbl.name = `social_label_${i}`;
+    if (url) url.name = `social_url_${i}`;
   });
 }

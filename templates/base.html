@@ -5,7 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{% block title %}Email Agent{% endblock %}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <!-- app.js MUST be deferred and listed BEFORE Alpine so the alpine:init
+       listener is always registered before Alpine fires it, even when cached. -->
+  <script defer src="{{ url_for('static', filename='js/app.js') }}"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js"></script>
 </head>
 <body x-data>
 
@@ -99,7 +102,7 @@
     </nav>
 
     {# Agent status in sidebar footer #}
-    <div class="sidebar-footer" x-data>
+    <div class="sidebar-footer">
       <div class="agent-status-pill">
         <span class="status-dot" :class="$store.agent.statusDotClass"></span>
         <span x-text="$store.agent.statusLabel" style="font-size:var(--text-xs);"></span>
@@ -139,7 +142,6 @@
 </div>{# end .app-shell #}
 
 <div id="toast-container" class="toast-container" role="status" aria-live="polite"></div>
-<script src="{{ url_for('static', filename='js/app.js') }}"></script>
 {% block scripts %}{% endblock %}
 
 </body>

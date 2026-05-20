@@ -1,124 +1,153 @@
 {% extends "base.html" %}
-{% from 'components/macros.html' import page_header, stat_card, alert %}
+{% from 'components/macros.html' import page_header %}
 {% block title %}Dashboard — Email Agent{% endblock %}
 
 {% block content %}
-{% set _ = '<script>document.addEventListener("alpine:init",()=>{Alpine.store("agent").init();Alpine.store("review").init();})</script>' %}
+{#
+  Uses the global agentStore ($store.agent) and reviewStore ($store.review)
+  registered in app.js via the alpine:init event.
+  No x-init needed — Alpine auto-calls init() on stores.
+#}
 
-<div x-data x-init="$store.agent.init(); $store.review.init()">
+{{ page_header('Dashboard') }}
 
-  {{ page_header('Dashboard') }}
+{# ── Status card ────────────────────────────────────────────────────────────── #}
+<div class="card card-lg" style="margin-bottom:var(--sp-5);">
+  <div style="display:flex;align-items:center;justify-content:space-between;gap:var(--sp-4);">
 
-  {# ── Status card ────────────────────────────────────────────────────────── #}
-  <div class="card card-lg mb-6" style="margin-bottom:var(--sp-5);">
-    <div class="flex-between">
-
-      {# Left: dot + status + stats #}
-      <div style="display:flex;align-items:center;gap:var(--sp-4);">
-        <div style="display:flex;align-items:center;gap:var(--sp-3);">
-          <span class="status-dot" :class="$store.agent.statusDotClass"></span>
-          <div>
-            <div style="font-size:var(--text-body);font-weight:600;color:var(--text-primary);" x-text="$store.agent.statusLabel">Stopped</div>
-            <div style="font-size:var(--text-sm);color:var(--text-tertiary);">
-              <span x-text="$store.agent.draftCount">0</span> queued today
-              · <a href="/review" style="color:var(--accent);text-decoration:none;" x-show="$store.agent.reviewCount > 0">
-                  <span x-text="$store.agent.reviewCount"></span> pending review
-                </a>
-            </div>
-          </div>
+    {# Status + stats #}
+    <div style="display:flex;align-items:center;gap:var(--sp-3);">
+      <span class="status-dot" :class="$store.agent.statusDotClass"></span>
+      <div>
+        <div style="font-size:var(--text-body);font-weight:600;color:var(--text-primary);"
+          x-text="$store.agent.statusLabel">Stopped</div>
+        <div style="font-size:var(--text-sm);color:var(--text-tertiary);">
+          <span x-text="$store.agent.draftCount">0</span> queued today
+          <template x-if="$store.review.count > 0">
+            <span> · <a href="/review" style="color:var(--accent);text-decoration:none;">
+              <span x-text="$store.review.count"></span> pending review
+            </a></span>
+          </template>
         </div>
       </div>
+    </div>
 
-      {# Right: action buttons #}
-      <div style="display:flex;align-items:center;gap:var(--sp-2);">
-        {# Reconnect Gmail — shown only when auth error #}
-        <button
-          x-show="$store.agent.isAuthError && !$store.agent.isReconnecting"
-          @click="$store.agent.reconnect()"
-          class="btn btn-secondary"
-          style="border-color:var(--status-warning);color:var(--status-warning);"
-        >
-          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+    {# Action buttons #}
+    <div style="display:flex;align-items:center;gap:var(--sp-2);">
+
+      {# Re-connect Gmail — only when auth error and not already reconnecting #}
+      <template x-if="$store.agent.isAuthError && !$store.agent.isReconnecting">
+        <button @click="$store.agent.reconnect()" class="btn btn-secondary"
+          style="border-color:var(--status-warning);color:var(--status-warning);">
+          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"
+            viewBox="0 0 24 24" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round"
+              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+          </svg>
           Re-connect Gmail
         </button>
+      </template>
 
-        {# Reconnecting spinner #}
-        <span
-          x-show="$store.agent.isReconnecting"
-          style="font-size:var(--text-sm);color:var(--text-secondary);display:flex;align-items:center;gap:var(--sp-2);"
-        >
-          <svg class="spin" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+      {# Reconnecting spinner #}
+      <template x-if="$store.agent.isReconnecting">
+        <span style="display:flex;align-items:center;gap:var(--sp-2);font-size:var(--text-sm);color:var(--text-secondary);">
+          <svg class="spin" width="14" height="14" fill="none" stroke="currentColor"
+            stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round"
+              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+          </svg>
           Connecting…
         </span>
-
-        {# Start / Stop toggle #}
-        <button
-          class="btn btn-agent"
-          :class="$store.agent.running ? 'btn-agent--stop' : 'btn-agent--start'"
-          :disabled="$store.agent.isReconnecting"
-          @click="$store.agent.toggle()"
-          x-text="$store.agent.running ? 'Stop Agent' : 'Start Agent'"
-        >Start Agent</button>
-      </div>
-
-    </div>
-
-    {# Auth error notice #}
-    <div
-      x-show="$store.agent.isAuthError && !$store.agent.isReconnecting"
-      style="margin-top:var(--sp-4);"
-    >
-      <div class="alert alert-warning">
-        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
-        <span><strong>Gmail access expired.</strong> Click <em>Re-connect Gmail</em> — a browser window will open for a quick Google sign-in. No reinstall needed.</span>
-      </div>
-    </div>
-
-    {# General (non-auth) error #}
-    <div
-      x-show="$store.agent.error && !$store.agent.isAuthError"
-      style="margin-top:var(--sp-4);"
-    >
-      <div class="alert alert-error">
-        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path stroke-linecap="round" d="M12 8v4m0 4h.01"/></svg>
-        <span x-text="$store.agent.error"></span>
-      </div>
-    </div>
-
-  </div>{# end status card #}
-
-  {# ── Activity log ───────────────────────────────────────────────────────── #}
-  <div class="card">
-    <div class="flex-between" style="margin-bottom:var(--sp-4);">
-      <div style="font-size:var(--text-md);font-weight:600;color:var(--text-primary);">Activity Log</div>
-      <div style="font-size:var(--text-xs);color:var(--text-tertiary);">Updates every 5 seconds</div>
-    </div>
-
-    <div class="log-container" id="log-container" role="log" aria-live="polite" aria-label="Agent activity log">
-      <template x-if="$store.agent.logs.length === 0">
-        <div style="text-align:center;padding:var(--sp-8) 0;color:var(--text-tertiary);font-size:var(--text-md);font-family:var(--font);">
-          No activity yet. Start the agent to begin.
-        </div>
       </template>
 
-      <template x-for="(entry, idx) in $store.agent.logs" :key="idx">
-        <div class="log-entry fade-in">
-          <span class="log-time" x-text="entry.timestamp"></span>
-          <div>
-            <span
-              :class="{
-                'log-msg--success': entry.level === 'success',
-                'log-msg--error':   entry.level === 'error',
-                'log-msg--info':    entry.level === 'info',
-              }"
-              x-text="entry.message"
-            ></span>
-            <div class="log-summary" x-show="entry.summary" x-text="entry.summary"></div>
-          </div>
-        </div>
-      </template>
+      {# Start / Stop toggle #}
+      <button
+        class="btn btn-agent"
+        :class="$store.agent.running ? 'btn-agent--stop' : 'btn-agent--start'"
+        :disabled="$store.agent.isReconnecting || $store.agent.toggling"
+        @click="$store.agent.toggle()"
+        aria-live="polite"
+      >
+        <template x-if="$store.agent.toggling">
+          <svg class="spin" width="14" height="14" fill="none" stroke="currentColor"
+            stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round"
+              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+          </svg>
+        </template>
+        <span x-text="$store.agent.toggling ? 'Starting…' : ($store.agent.running ? 'Stop Agent' : 'Start Agent')">
+          Start Agent
+        </span>
+      </button>
+
     </div>
   </div>
 
+  {# Auth error notice #}
+  <template x-if="$store.agent.isAuthError && !$store.agent.isReconnecting">
+    <div style="margin-top:var(--sp-4);">
+      <div class="alert alert-warning">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"
+          viewBox="0 0 24 24" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round"
+            d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+        </svg>
+        <span><strong>Gmail access expired.</strong>
+          Click <em>Re-connect Gmail</em> — a browser window will open for a quick Google sign-in.</span>
+      </div>
+    </div>
+  </template>
+
+  {# General error (non-auth) #}
+  <template x-if="$store.agent.error && !$store.agent.isAuthError">
+    <div style="margin-top:var(--sp-4);">
+      <div class="alert alert-error">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"
+          viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="12" cy="12" r="10"/>
+          <path stroke-linecap="round" d="M12 8v4m0 4h.01"/>
+        </svg>
+        <span x-text="$store.agent.error"></span>
+      </div>
+    </div>
+  </template>
+
 </div>
+
+{# ── Activity log ────────────────────────────────────────────────────────────── #}
+<div class="card">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--sp-4);">
+    <div style="font-size:var(--text-md);font-weight:600;color:var(--text-primary);">Activity Log</div>
+    <div style="font-size:var(--text-xs);color:var(--text-tertiary);">Auto-refreshes every 5 s</div>
+  </div>
+
+  <div class="log-container" id="log-container"
+    role="log" aria-live="polite" aria-label="Agent activity log">
+
+    <template x-if="$store.agent.logs.length === 0">
+      <div style="text-align:center;padding:var(--sp-8) 0;
+        color:var(--text-tertiary);font-size:var(--text-md);font-family:var(--font);">
+        No activity yet. Start the agent to begin.
+      </div>
+    </template>
+
+    <template x-for="(entry, idx) in $store.agent.logs" :key="idx">
+      <div class="log-entry">
+        <span class="log-time" x-text="entry.timestamp"></span>
+        <div>
+          <span :class="{
+              'log-msg--success': entry.level === 'success',
+              'log-msg--error':   entry.level === 'error',
+              'log-msg--info':    entry.level === 'info'
+            }"
+            x-text="entry.message">
+          </span>
+          <div class="log-summary" x-show="entry.summary" x-text="entry.summary"></div>
+        </div>
+      </div>
+    </template>
+
+  </div>
+</div>
+
 {% endblock %}
