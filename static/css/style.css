@@ -291,6 +291,13 @@ body {
 .status-dot--error    { background: var(--status-error); }
 .status-dot--warning  { background: var(--status-warning); }
 
+/* Activity feed entry states */
+.activity-icon--pending    { background: var(--status-warning-light); color: #92400e; }
+.activity-icon--success    { background: var(--status-success-light); color: #065f46; }
+.activity-icon--discarded  { background: var(--bg-elevated);           color: var(--text-tertiary); }
+.activity-icon--error      { background: var(--status-error-light);    color: #9a3412; }
+.activity-icon--info       { background: var(--bg-elevated);           color: var(--text-tertiary); }
+
 /* ── 5. Main Content ──────────────────────────────────────────────────────── */
 
 .main {

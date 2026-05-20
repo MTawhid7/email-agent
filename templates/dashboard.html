@@ -125,27 +125,54 @@
     <template x-for="(entry, idx) in $store.agent.logs.filter(e => e.level !== 'info' || e.message !== 'No new emails.')" :key="idx">
       <div class="activity-row" :data-level="entry.level">
 
-        {# Left: icon circle #}
+        {# Left: icon circle — colour reflects current state #}
         <div class="activity-icon"
-          :style="entry.level === 'success' ? 'background:var(--status-success-light);color:#065f46;'
-                : entry.level === 'error'   ? 'background:var(--status-error-light);color:#9a3412;'
-                : 'background:var(--bg-elevated);color:var(--text-tertiary);'">
+          :class="entry.level === 'success'   ? 'activity-icon--success'
+                : entry.level === 'pending'   ? 'activity-icon--pending'
+                : entry.level === 'discarded' ? 'activity-icon--discarded'
+                : entry.level === 'error'     ? 'activity-icon--error'
+                :                               'activity-icon--info'">
+
+          {# Sent (success) — green check #}
           <template x-if="entry.level === 'success'">
             <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"
               viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
           </template>
+
+          {# Pending review — amber clock #}
+          <template x-if="entry.level === 'pending'">
+            <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"
+              viewBox="0 0 24 24">
+              <circle cx="12" cy="12" r="9"/>
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 7v5l3 3"/>
+            </svg>
+          </template>
+
+          {# Discarded — gray dash #}
+          <template x-if="entry.level === 'discarded'">
+            <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"
+              viewBox="0 0 24 24"><path stroke-linecap="round" d="M5 12h14"/></svg>
+          </template>
+
+          {# Error — red X #}
           <template x-if="entry.level === 'error'">
             <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"
               viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
           </template>
+
+          {# Info: started #}
           <template x-if="entry.level === 'info' && entry.message.includes('started')">
             <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"
               viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z"/></svg>
           </template>
+
+          {# Info: stopped #}
           <template x-if="entry.level === 'info' && entry.message.includes('stopped')">
             <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"
               viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1" stroke-linecap="round"/></svg>
           </template>
+
+          {# Info: other #}
           <template x-if="entry.level === 'info' && !entry.message.includes('started') && !entry.message.includes('stopped')">
             <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"
               viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5"/></svg>
@@ -154,7 +181,7 @@
 
         {# Centre: friendly message + optional summary #}
         <div style="flex:1;min-width:0;">
-          <div class="activity-title" x-text="friendlyMessage(entry.message)"></div>
+          <div class="activity-title" x-text="friendlyMessage(entry.message, entry.level)"></div>
           <div class="activity-summary" x-show="entry.summary" x-text="entry.summary"></div>
         </div>
 
@@ -172,16 +199,23 @@
 {% block scripts %}
 <script>
 // Convert technical log messages to human-friendly text
-function friendlyMessage(msg) {
+// level is used to adjust wording after user has resolved a pending item
+function friendlyMessage(msg, level) {
   if (!msg) return msg;
   // Strip leading emoji priority codes
   msg = msg.replace(/^[🔴🟡⚪⏭]\s*/u, '');
   // Queued for review: Name <email>
-  msg = msg.replace(/^Queued for review:\s*(.+?)\s*<[^>]+>$/, 'Reply ready for $1');
+  const queueMatch = msg.match(/^Queued for review:\s*(.+?)\s*<[^>]+>$/);
+  if (queueMatch) {
+    const name = queueMatch[1];
+    if (level === 'success')   return 'Sent to ' + name;
+    if (level === 'discarded') return 'Discarded — ' + name;
+    return 'Waiting for review — ' + name;   // pending
+  }
   // Skipped (reason): Name
-  msg = msg.replace(/^Skipped \(([^)]+)\):\s*(.+)$/, (_, reason, name) => {
+  msg = msg.replace(/^Skipped \(([^)]+)\):\s*(.+)$/, (_, reason) => {
     if (/newsletter|marketing|promo|notif/i.test(reason)) return 'Skipped automated email';
-    return 'Skipped · ' + name;
+    return 'Skipped — not a personal email';
   });
   // Agent lifecycle
   if (msg === 'Agent started.') return 'Agent started';

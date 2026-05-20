@@ -208,9 +208,9 @@ class AgentDaemon:
 
                 emoji = _PRIORITY_EMOJI.get(priority, "🟡")
                 self._append_log(
-                    "success",
+                    "pending",   # amber — waiting for user action in Review Queue
                     f"{emoji} Queued for review: {parsed.sender_name} <{parsed.sender_email}>",
-                    summary=summary, priority=priority,
+                    summary=summary, priority=priority, item_id=item_id,
                 )
                 count += 1
 
@@ -223,18 +223,35 @@ class AgentDaemon:
 
     # ── Helpers ────────────────────────────────────────────────────────────────
 
-    def _append_log(self, level: str, message: str, summary: str = "", priority: str = "") -> None:
+    def resolve_review_item(self, item_id: str, action: str) -> None:
+        """
+        Update the activity log entry for a review item after the user acts.
+        action: 'sent' → green success  |  'discarded' → gray discarded
+        Called from routes/review.py after Send Now or Discard.
+        """
+        level = "success" if action == "sent" else "discarded"
+        for entry in self._logs:
+            if entry.get("item_id") == item_id:
+                entry["level"] = level
+                entry["resolved"] = action
+                break
+
+    def _append_log(self, level: str, message: str, summary: str = "",
+                    priority: str = "", item_id: str = "") -> None:
         entry = {
             "level": level,
             "message": message,
             "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "summary": summary,
             "priority": priority,
+            "item_id": item_id,    # non-empty for review queue items
+            "resolved": "",        # set to 'sent' or 'discarded' after user action
         }
         # deque.append() is thread-safe — no lock needed.
         # Never call this while holding self._lock (threading.Lock is not reentrant).
         self._logs.append(entry)
-        getattr(logger, "info" if level in ("info", "success") else level, logger.info)(message)
+        getattr(logger, "info" if level in ("info", "success", "pending", "discarded")
+                else level, logger.info)(message)
 
     def _set_error(self, message: str) -> None:
         with self._lock:

@@ -4,52 +4,45 @@ from config import Settings
 
 # ── Icon delivery ──────────────────────────────────────────────────────────────
 #
-# Gmail (and most web clients) block ALL data: URIs and inline SVG in emails.
-# The only universally supported method is externally hosted HTTPS PNG images.
+# Gmail (and most web clients) block ALL data: URIs. jsDelivr requires the
+# GitHub repo to be public. The only guaranteed-working method for any email
+# client is externally hosted HTTPS PNG images.
 #
-# We serve our branded icons from jsDelivr CDN backed by this public GitHub repo.
-# jsDelivr is purpose-built for serving static assets from GitHub repos with
-# global CDN caching — the exact approach used by Wisestamp, Exclaimer, etc.
-#
-# URL pattern: https://cdn.jsdelivr.net/gh/{owner}/{repo}@{branch}/path/to/file
+# Google's favicon service (s2/favicons) is served from Google's own CDN.
+# Gmail auto-loads images from Google's CDN. Returns actual brand favicons as
+# PNG: LinkedIn's blue "in" square, GitHub's Octocat, WhatsApp's green phone,
+# etc. — exactly what users expect to see.
 
-_JSDELIVR_BASE = "https://cdn.jsdelivr.net/gh/MTawhid7/email-agent@main/static/icons"
-
-# Platform slugs that have a bundled PNG in static/icons/
-_BUNDLED_ICONS = frozenset({
-    "linkedin", "whatsapp", "instagram", "twitter", "x",
-    "facebook", "github", "youtube", "tiktok", "telegram", "discord",
-})
-
-# Google favicon service — fallback for unknown/custom platform labels
 _GOOGLE_FAVICON = "https://www.google.com/s2/favicons?domain={domain}&sz=64"
 
-# Known platform → canonical domain (for Google favicon fallback)
-_PLATFORM_DOMAINS: dict[str, str | None] = {
+# Known platform → canonical domain
+_PLATFORM_DOMAINS: dict[str, str] = {
+    "linkedin":  "linkedin.com",
+    "whatsapp":  "whatsapp.com",
+    "instagram": "instagram.com",
+    "twitter":   "twitter.com",
+    "x":         "x.com",
+    "facebook":  "facebook.com",
+    "github":    "github.com",
+    "youtube":   "youtube.com",
+    "tiktok":    "tiktok.com",
+    "telegram":  "telegram.org",
+    "discord":   "discord.com",
     "snapchat":  "snapchat.com",
     "pinterest": "pinterest.com",
     "reddit":    "reddit.com",
-    "website":   None,
-    "blog":      None,
-    "portfolio": None,
 }
 
 
 def _icon_src(label: str, link_url: str) -> str:
     """
-    Return the best HTTPS URL for a social platform icon.
-    1. Bundled PNG via jsDelivr CDN (known platforms)
-    2. Google favicon service (unknown labels — uses the link's own domain)
+    Return a Google favicon HTTPS URL for the platform icon.
+    Known platforms use the canonical domain; others extract domain from the URL.
     """
     key = label.lower().strip()
-
-    if key in _BUNDLED_ICONS:
-        return f"{_JSDELIVR_BASE}/{key}.png"
-
-    # Try Google favicon with known domain mapping first
     domain = _PLATFORM_DOMAINS.get(key)
+
     if domain is None:
-        # Extract domain from the supplied URL
         try:
             parsed = urlparse(link_url)
             domain = parsed.netloc or link_url
@@ -60,7 +53,7 @@ def _icon_src(label: str, link_url: str) -> str:
 
 
 def _icon_html(label: str, url: str) -> str:
-    """Build an email-safe icon link using an externally hosted HTTPS PNG."""
+    """Build an email-safe icon link using Google's favicon CDN."""
     src = _icon_src(label, url)
     return (
         f'<a href="{url}" title="{label}" target="_blank" rel="noopener noreferrer" '

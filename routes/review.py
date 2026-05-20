@@ -1,10 +1,10 @@
 from flask import Blueprint, jsonify, redirect, render_template, request, url_for
 
+import app as app_module
 from agent.review_queue import review_queue
-from config import load_settings_from_dict
 from gmail_client.auth import get_credentials
 from gmail_client.gmail_client import GmailClient
-from storage.app_config import get_credentials_path, get_token_path, load_config
+from storage.app_config import get_credentials_path, get_token_path
 
 review_bp = Blueprint("review", __name__)
 
@@ -39,6 +39,7 @@ def review_send(item_id: str):
         references=item["message_id_header"],
     )
     review_queue.remove(item_id)
+    app_module.daemon.resolve_review_item(item_id, "sent")
     return redirect(url_for("review.review"))
 
 
@@ -58,12 +59,14 @@ def review_draft(item_id: str):
         references=item["message_id_header"],
     )
     review_queue.remove(item_id)
+    app_module.daemon.resolve_review_item(item_id, "sent")
     return redirect(url_for("review.review"))
 
 
 @review_bp.route("/review/<item_id>/discard", methods=["POST"])
 def review_discard(item_id: str):
     review_queue.remove(item_id)
+    app_module.daemon.resolve_review_item(item_id, "discarded")
     return redirect(url_for("review.review"))
 
 
