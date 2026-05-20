@@ -189,8 +189,9 @@ class AgentDaemon:
                 )
 
                 # ── Feature 1: Push to review queue ────────────────────────────
+                item_id = str(uuid.uuid4())   # defined here so _append_log can reference it
                 review_queue.push({
-                    "id": str(uuid.uuid4()),
+                    "id": item_id,
                     "sender_name": parsed.sender_name,
                     "sender_email": parsed.sender_email,
                     "subject": reply_subject,
