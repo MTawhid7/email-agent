@@ -46,16 +46,17 @@
   </div>
 </div>
 
-{# ── Add contact form ──────────────────────────────────────────────────────── #}
+{# ── Add / Edit contact form ───────────────────────────────────────────────── #}
 <div id="add-form" style="display:none;margin-bottom:var(--sp-5);">
   <div class="card card-lg">
-    <div class="card-section-title">New Contact</div>
+    <div id="contact-form-title" class="card-section-title">New Contact</div>
     <form method="POST" action="/contacts">
       <div style="display:flex;flex-direction:column;gap:var(--sp-3);">
         <div class="grid-2">
           <div class="field">
             <label class="label label-required">Email</label>
-            <input type="email" name="email" placeholder="person@example.com" required class="input">
+            <input id="contact-email" type="email" name="email"
+              placeholder="person@example.com" required class="input">
           </div>
           <div class="field">
             <label class="label">Name</label>
@@ -98,8 +99,8 @@
         </div>
       </div>
       <div style="display:flex;gap:var(--sp-2);margin-top:var(--sp-4);">
-        {{ btn('Save Contact', variant='primary', type='submit') }}
-        <button type="button" onclick="toggleAddForm()" class="btn btn-ghost">Cancel</button>
+        <button id="contact-submit-btn" type="submit" class="btn btn-primary">Save Contact</button>
+        <button type="button" onclick="cancelContactForm()" class="btn btn-ghost">Cancel</button>
       </div>
     </form>
   </div>
@@ -145,12 +146,27 @@
         </td>
         <td style="color:var(--text-secondary);max-width:240px;" class="truncate">{{ contact.notes or '—' }}</td>
         <td style="text-align:right;">
-          <button onclick="deleteContact('{{ contact.email }}')"
-            class="btn btn-ghost btn-sm"
-            style="color:var(--status-error);"
-            aria-label="Delete {{ contact.name or contact.email }}">
-            Delete
-          </button>
+          <div style="display:flex;gap:var(--sp-1);justify-content:flex-end;">
+            <button
+              class="btn btn-ghost btn-sm"
+              onclick="editContact(this)"
+              data-email="{{ contact.email }}"
+              data-name="{{ contact.name }}"
+              data-company="{{ contact.company }}"
+              data-relationship="{{ contact.relationship_type }}"
+              data-notes="{{ contact.notes }}"
+              data-tone="{{ contact.tone }}"
+              data-is-teammate="{{ 'true' if contact.is_teammate else 'false' }}"
+              aria-label="Edit {{ contact.name or contact.email }}">
+              Edit
+            </button>
+            <button onclick="deleteContact('{{ contact.email }}')"
+              class="btn btn-ghost btn-sm"
+              style="color:var(--status-error);"
+              aria-label="Delete {{ contact.name or contact.email }}">
+              Delete
+            </button>
+          </div>
         </td>
       </tr>
       {% endfor %}
@@ -171,18 +187,70 @@
 
 {% block scripts %}
 <script>
+// ── Form visibility ────────────────────────────────────────────────────────────
+
 function toggleAddForm() {
   const f = document.getElementById('add-form');
   const open = f.style.display === 'none';
+  if (open) {
+    resetContactForm();
+    document.getElementById('import-form').style.display = 'none';
+  }
   f.style.display = open ? 'block' : 'none';
-  if (open) document.getElementById('import-form').style.display = 'none';
 }
+
 function toggleImportForm() {
   const f = document.getElementById('import-form');
   const open = f.style.display === 'none';
   f.style.display = open ? 'block' : 'none';
   if (open) document.getElementById('add-form').style.display = 'none';
 }
+
+function cancelContactForm() {
+  resetContactForm();
+  document.getElementById('add-form').style.display = 'none';
+}
+
+// ── Add / edit mode ───────────────────────────────────────────────────────────
+
+function resetContactForm() {
+  const form = document.querySelector('#add-form form');
+  form.reset();
+  const emailInput = document.getElementById('contact-email');
+  emailInput.readOnly = false;
+  emailInput.style.opacity = '';
+  document.getElementById('contact-form-title').textContent = 'New Contact';
+  document.getElementById('contact-submit-btn').textContent = 'Save Contact';
+}
+
+function editContact(btn) {
+  const form = document.querySelector('#add-form form');
+
+  // Populate every field from data attributes (HTML-escaped by Jinja, auto-decoded by dataset)
+  const emailInput = document.getElementById('contact-email');
+  emailInput.value = btn.dataset.email;
+  emailInput.readOnly = true;
+  emailInput.style.opacity = '0.6';  // visual cue that email is the key and cannot change
+
+  form.querySelector('[name=name]').value              = btn.dataset.name;
+  form.querySelector('[name=company]').value           = btn.dataset.company;
+  form.querySelector('[name=relationship_type]').value = btn.dataset.relationship;
+  form.querySelector('[name=notes]').value             = btn.dataset.notes;
+  form.querySelector('[name=tone]').value              = btn.dataset.tone;
+  form.querySelector('[name=is_teammate]').checked     = btn.dataset.isTeammate === 'true';
+
+  // Switch form to edit mode
+  document.getElementById('contact-form-title').textContent  = 'Edit Contact';
+  document.getElementById('contact-submit-btn').textContent  = 'Save Changes';
+
+  // Close import form, open edit form, scroll into view
+  document.getElementById('import-form').style.display = 'none';
+  document.getElementById('add-form').style.display    = 'block';
+  document.getElementById('add-form').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// ── Delete ─────────────────────────────────────────────────────────────────────
+
 function deleteContact(email) {
   if (!confirm('Delete contact ' + email + '?')) return;
   fetch('/contacts/' + encodeURIComponent(email), { method: 'DELETE' })
