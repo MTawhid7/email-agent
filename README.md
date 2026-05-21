@@ -30,8 +30,8 @@ The app packages as a native desktop application (`.app` on macOS, `.exe` on Win
 | **Template Library** | 15 pre-built reply templates across 5 categories; fully editable |
 | **Auto-Translate** | Detect incoming email language and reply in the same language |
 | **Attachment Summarisation** | PDFs and images summarised via Gemini Files API and injected into reply context |
-| **Bulk Send** | Generate personalised drafts for multiple recipients via CSV or manual entry |
-| **Contact Management** | Per-contact notes and tone preferences injected into every AI prompt |
+| **Bulk Send** | Generate personalised drafts for multiple recipients — enter manually, upload a CSV, or pick from saved contacts |
+| **Contact Management** | Per-contact notes and tone preferences; add individually or import from CSV; used in bulk send recipient picker |
 | **Social Link Icons** | Brand icons (LinkedIn, GitHub, WhatsApp, etc.) in email signature via jsDelivr CDN |
 | **Knowledge Base** | Free-form facts injected into every AI prompt — prevents hallucinated phone numbers / contact details |
 | **Review Status Tracking** | Activity log reflects pending → sent / discarded state after user action |

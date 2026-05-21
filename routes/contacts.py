@@ -1,3 +1,6 @@
+import csv
+import io
+
 from flask import Blueprint, jsonify, redirect, render_template, request, url_for
 from contacts.contact_store import ContactProfile, ContactStore
 from storage.app_config import get_contacts_path
@@ -30,6 +33,31 @@ def contacts_add():
         tone=request.form.get("tone", "").strip(),
     )
     _store().upsert(profile)
+    return redirect(url_for("contacts.contacts"))
+
+
+@contacts_bp.route("/contacts/import", methods=["POST"])
+def contacts_import():
+    file = request.files.get("csv_file")
+    if not file or file.filename == "":
+        return redirect(url_for("contacts.contacts"))
+
+    store = _store()
+    content = file.read().decode("utf-8", errors="replace")
+    reader = csv.DictReader(io.StringIO(content))
+    for row in reader:
+        email = row.get("email", "").strip()
+        if not email:
+            continue
+        profile = ContactProfile(
+            email=email,
+            name=row.get("name", "").strip(),
+            company=row.get("company", "").strip(),
+            relationship_type=row.get("relationship_type", "").strip(),
+            notes=row.get("notes", "").strip(),
+            tone=row.get("tone", "").strip(),
+        )
+        store.upsert(profile)
     return redirect(url_for("contacts.contacts"))
 
 

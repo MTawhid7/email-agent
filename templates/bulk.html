@@ -12,6 +12,7 @@
   <div class="tabs" id="bulk-tabs">
     <button class="tab active" onclick="switchTab('manual')" id="tab-manual">Enter manually</button>
     <button class="tab" onclick="switchTab('csv')" id="tab-csv">Upload CSV</button>
+    <button class="tab" onclick="switchTab('contacts')" id="tab-contacts">Saved contacts</button>
   </div>
 
   {% if error %}{{ alert(error, 'error') }}{% endif %}
@@ -71,6 +72,75 @@
         <textarea name="intent" rows="2" required class="textarea"
           placeholder="e.g. Follow up on our Q2 proposal…"></textarea>
       </div>
+      {{ btn('Generate Drafts', variant='primary', type='submit', cls='btn-lg', attrs='style="width:100%;"') }}
+    </form>
+  </div>
+
+  {# ── Saved contacts panel ─────────────────────────────────────────────── #}
+  <div id="panel-contacts" style="display:none;">
+    <form method="POST" style="display:flex;flex-direction:column;gap:var(--sp-4);">
+      <input type="hidden" name="input_mode" value="contacts">
+
+      <div class="field">
+        <label class="label label-required">Email Intent</label>
+        <textarea name="intent" rows="2" required class="textarea"
+          placeholder="e.g. Follow up on our Q2 proposal…"></textarea>
+        <p class="hint">What the email should communicate — the AI personalises each draft for the recipient.</p>
+      </div>
+
+      <div class="field">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--sp-2);">
+          <div class="label" style="margin:0;">
+            Recipients
+            <span style="font-weight:400;color:var(--text-tertiary);">(<span id="selected-count">0</span> selected)</span>
+          </div>
+          <div style="display:flex;gap:var(--sp-3);">
+            <button type="button" onclick="selectAllContacts()"
+              style="font-size:var(--text-sm);color:var(--accent);background:none;border:none;cursor:pointer;font-family:var(--font);">Select all</button>
+            <button type="button" onclick="clearContacts()"
+              style="font-size:var(--text-sm);color:var(--text-tertiary);background:none;border:none;cursor:pointer;font-family:var(--font);">Clear</button>
+          </div>
+        </div>
+
+        {% if all_contacts %}
+        <input type="text" id="contact-search" placeholder="Search by name, email, or company…"
+          oninput="filterContacts(this.value)" class="input" style="margin-bottom:var(--sp-2);">
+
+        <div id="contacts-list"
+          style="border:1px solid var(--border-default);border-radius:var(--r-md);max-height:300px;overflow-y:auto;">
+          {% for contact in all_contacts %}
+          <label class="contact-row"
+            data-search="{{ ((contact.name or '') ~ ' ' ~ contact.email ~ ' ' ~ (contact.company or ''))|lower }}"
+            style="display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-3);cursor:pointer;{% if not loop.last %}border-bottom:1px solid var(--border-default);{% endif %}transition:background var(--dur-fast);"
+            onmouseover="this.style.background='var(--bg-elevated)'"
+            onmouseout="this.style.background=''">
+            <input type="checkbox" name="selected_contacts" value="{{ contact.email }}"
+              style="width:16px;height:16px;flex-shrink:0;cursor:pointer;"
+              onchange="updateSelectedCount()">
+            <div style="min-width:0;flex:1;">
+              <div style="font-weight:500;color:var(--text-primary);font-size:var(--text-sm);">
+                {{ contact.name or contact.email }}
+              </div>
+              <div style="font-size:var(--text-xs);color:var(--text-tertiary);">
+                {{ contact.email }}{% if contact.company %} · {{ contact.company }}{% endif %}
+              </div>
+            </div>
+            {% if contact.tone %}
+            <span style="font-size:var(--text-xs);color:var(--accent);background:var(--bg-elevated);padding:2px 8px;border-radius:var(--r-full);flex-shrink:0;">
+              {{ contact.tone }}
+            </span>
+            {% endif %}
+          </label>
+          {% endfor %}
+        </div>
+        {% else %}
+        <div style="padding:var(--sp-6);text-align:center;color:var(--text-tertiary);font-size:var(--text-sm);border:1px dashed var(--border-default);border-radius:var(--r-md);">
+          No saved contacts yet.
+          <a href="/contacts" style="color:var(--accent);">Add contacts</a> to use this option.
+        </div>
+        {% endif %}
+      </div>
+
       {{ btn('Generate Drafts', variant='primary', type='submit', cls='btn-lg', attrs='style="width:100%;"') }}
     </form>
   </div>
@@ -140,11 +210,10 @@
 let recipientCount = 1;
 
 function switchTab(tab) {
-  const isManual = tab === 'manual';
-  document.getElementById('panel-manual').style.display = isManual ? 'block' : 'none';
-  document.getElementById('panel-csv').style.display   = isManual ? 'none'  : 'block';
-  document.getElementById('tab-manual').className = 'tab' + (isManual  ? ' active' : '');
-  document.getElementById('tab-csv').className    = 'tab' + (!isManual ? ' active' : '');
+  ['manual', 'csv', 'contacts'].forEach(t => {
+    document.getElementById('panel-' + t).style.display = t === tab ? 'block' : 'none';
+    document.getElementById('tab-' + t).className = 'tab' + (t === tab ? ' active' : '');
+  });
 }
 
 function addRecipient() {
@@ -167,6 +236,31 @@ function addRecipient() {
 function removeRecipient(btn) {
   const rows = document.querySelectorAll('.recipient-row');
   if (rows.length > 1) btn.closest('.recipient-row').remove();
+}
+
+// ── Saved contacts panel ──────────────────────────────────────────────────────
+
+function updateSelectedCount() {
+  const n = document.querySelectorAll('#contacts-list input[type="checkbox"]:checked').length;
+  const el = document.getElementById('selected-count');
+  if (el) el.textContent = n;
+}
+
+function selectAllContacts() {
+  document.querySelectorAll('#contacts-list .contact-row:not([style*="display: none"]) input[type="checkbox"]').forEach(cb => cb.checked = true);
+  updateSelectedCount();
+}
+
+function clearContacts() {
+  document.querySelectorAll('#contacts-list input[type="checkbox"]').forEach(cb => cb.checked = false);
+  updateSelectedCount();
+}
+
+function filterContacts(q) {
+  q = q.toLowerCase();
+  document.querySelectorAll('#contacts-list .contact-row').forEach(row => {
+    row.style.display = (!q || row.dataset.search.includes(q)) ? '' : 'none';
+  });
 }
 </script>
 {% endblock %}

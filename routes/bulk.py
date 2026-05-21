@@ -30,7 +30,8 @@ _jobs_lock = threading.Lock()
 @bulk_bp.route("/bulk", methods=["GET"])
 def bulk():
     job_id = request.args.get("job")
-    return render_template("bulk.html", job_id=job_id)
+    all_contacts = [] if job_id else ContactStore(path=get_contacts_path()).list_all()
+    return render_template("bulk.html", job_id=job_id, all_contacts=all_contacts)
 
 
 @bulk_bp.route("/bulk", methods=["POST"])
@@ -38,18 +39,36 @@ def bulk_submit():
     intent = request.form.get("intent", "").strip()
     input_mode = request.form.get("input_mode", "csv")
 
+    def _render_error(msg: str):
+        all_contacts = ContactStore(path=get_contacts_path()).list_all()
+        return render_template("bulk.html", job_id=None, error=msg, all_contacts=all_contacts)
+
     if not intent:
-        return render_template("bulk.html", job_id=None, error="Please enter an email intent.")
+        return _render_error("Please enter an email intent.")
 
     if input_mode == "manual":
         rows = _parse_manual_recipients(request.form)
         if not rows:
-            return render_template("bulk.html", job_id=None, error="Please add at least one recipient with a valid email.")
+            return _render_error("Please add at least one recipient with a valid email.")
         csv_path = _recipients_to_temp_csv(rows)
-    else:
+    elif input_mode == "contacts":
+        selected_emails = request.form.getlist("selected_contacts")
+        if not selected_emails:
+            return _render_error("Please select at least one contact.")
+        store = ContactStore(path=get_contacts_path())
+        rows = []
+        for email in selected_emails:
+            profile = store.lookup(email)
+            rows.append({
+                "name": profile.name if profile else "",
+                "email": email,
+                "notes": profile.notes if profile else "",
+            })
+        csv_path = _recipients_to_temp_csv(rows)
+    else:  # csv
         file = request.files.get("csv_file")
         if not file or file.filename == "":
-            return render_template("bulk.html", job_id=None, error="Please upload a CSV file.")
+            return _render_error("Please upload a CSV file.")
         tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".csv")
         file.save(tmp.name)
         tmp.close()

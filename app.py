@@ -5,7 +5,7 @@ from flask import Flask, redirect, request, url_for
 
 from agent.daemon import AgentDaemon
 from agent.review_queue import review_queue  # noqa: F401 — re-exported for routes
-from storage.app_config import config_exists
+from storage.app_config import config_exists, get_token_path
 
 daemon = AgentDaemon()
 
@@ -58,5 +58,12 @@ def create_app() -> Flask:
     @app.route("/")
     def index():
         return redirect(url_for("dashboard.dashboard"))
+
+    # Auto-start the daemon if the user has already completed setup.
+    # This triggers the macOS network access prompt immediately on launch
+    # and ensures the first inbox check happens right away instead of waiting
+    # for the user to click "Start Agent".
+    if config_exists() and Path(get_token_path()).exists():
+        daemon.start()
 
     return app

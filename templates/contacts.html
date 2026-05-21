@@ -8,11 +8,42 @@
     <h1 class="page-title">Contacts</h1>
     <p class="page-subtitle">Contact notes are injected into the AI prompt for personalized replies.</p>
   </div>
-  <button onclick="toggleAddForm()"
-    class="btn btn-primary">
-    <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
-    Add Contact
-  </button>
+  <div style="display:flex;gap:var(--sp-2);">
+    <button onclick="toggleImportForm()" class="btn btn-ghost">
+      <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3"/></svg>
+      Import CSV
+    </button>
+    <button onclick="toggleAddForm()" class="btn btn-primary">
+      <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+      Add Contact
+    </button>
+  </div>
+</div>
+
+{# ── Import CSV form ────────────────────────────────────────────────────────── #}
+<div id="import-form" style="display:none;margin-bottom:var(--sp-5);">
+  <div class="card card-lg">
+    <div class="card-section-title">Import Contacts from CSV</div>
+    <p style="font-size:var(--text-sm);color:var(--text-secondary);margin-bottom:var(--sp-4);">
+      Required column: <code style="background:var(--bg-elevated);padding:1px 5px;border-radius:4px;">email</code>.
+      Optional: <code style="background:var(--bg-elevated);padding:1px 5px;border-radius:4px;">name</code>,
+      <code style="background:var(--bg-elevated);padding:1px 5px;border-radius:4px;">company</code>,
+      <code style="background:var(--bg-elevated);padding:1px 5px;border-radius:4px;">relationship_type</code>,
+      <code style="background:var(--bg-elevated);padding:1px 5px;border-radius:4px;">notes</code>,
+      <code style="background:var(--bg-elevated);padding:1px 5px;border-radius:4px;">tone</code>.
+      Existing contacts are updated, new ones are added.
+    </p>
+    <form method="POST" action="/contacts/import" enctype="multipart/form-data">
+      <div class="field">
+        <label class="label label-required">CSV File</label>
+        <input type="file" name="csv_file" accept=".csv" required class="input" style="height:auto;padding:var(--sp-2) var(--sp-3);">
+      </div>
+      <div style="display:flex;gap:var(--sp-2);margin-top:var(--sp-4);">
+        {{ btn('Import', variant='primary', type='submit') }}
+        <button type="button" onclick="toggleImportForm()" class="btn btn-ghost">Cancel</button>
+      </div>
+    </form>
+  </div>
 </div>
 
 {# ── Add contact form ──────────────────────────────────────────────────────── #}
@@ -129,7 +160,15 @@
 <script>
 function toggleAddForm() {
   const f = document.getElementById('add-form');
-  f.style.display = f.style.display === 'none' ? 'block' : 'none';
+  const open = f.style.display === 'none';
+  f.style.display = open ? 'block' : 'none';
+  if (open) document.getElementById('import-form').style.display = 'none';
+}
+function toggleImportForm() {
+  const f = document.getElementById('import-form');
+  const open = f.style.display === 'none';
+  f.style.display = open ? 'block' : 'none';
+  if (open) document.getElementById('add-form').style.display = 'none';
 }
 function deleteContact(email) {
   if (!confirm('Delete contact ' + email + '?')) return;

@@ -93,6 +93,7 @@ class AgentDaemon:
             return
 
         while not self._stop_event.is_set():
+            sleep_seconds = settings.poll_interval_seconds
             try:
                 count = self._process_unread(gmail, generator, contact_store, signature_html)
                 if not count:
@@ -104,10 +105,12 @@ class AgentDaemon:
                 return
             except EmailAgentError as exc:
                 self._append_log("error", f"Agent error: {exc}")
+                sleep_seconds = 30  # retry quickly after a recoverable error
             except Exception as exc:
                 self._append_log("error", f"Unexpected error: {exc}")
+                sleep_seconds = 30
 
-            for _ in range(settings.poll_interval_seconds * 2):
+            for _ in range(sleep_seconds * 2):
                 if self._stop_event.is_set():
                     break
                 time.sleep(0.5)
