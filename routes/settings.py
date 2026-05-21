@@ -31,6 +31,8 @@ def settings():
             "social_links": _parse_social_links_from_form(request.form),
             "auto_translate": request.form.get("auto_translate") == "true",
             "context_facts": request.form.get("context_facts", "").strip(),
+            "own_email": request.form.get("own_email", "").strip().lower(),
+            "team_domain": request.form.get("team_domain", "").strip().lower().lstrip("@"),
         }
 
         if not updated["gemini_api_key"]:

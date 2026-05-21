@@ -88,6 +88,14 @@
             <input type="text" name="notes" placeholder="Prefers brief replies…" class="input">
           </div>
         </div>
+        <div class="field">
+          <label style="display:flex;align-items:center;gap:var(--sp-2);cursor:pointer;">
+            <input type="checkbox" name="is_teammate" value="true"
+              style="width:16px;height:16px;cursor:pointer;">
+            <span class="label" style="margin:0;">Teammate</span>
+          </label>
+          <p class="hint">The agent will skip emails from this person when you are only CC'd — they're just keeping you informed.</p>
+        </div>
       </div>
       <div style="display:flex;gap:var(--sp-2);margin-top:var(--sp-4);">
         {{ btn('Save Contact', variant='primary', type='submit') }}
@@ -124,11 +132,16 @@
         </td>
         <td style="color:var(--text-secondary);">{{ contact.company or '—' }}</td>
         <td>
-          {% if contact.tone %}
-            {{ badge(contact.tone, 'blue') }}
-          {% else %}
-            <span style="color:var(--text-disabled);">Default</span>
-          {% endif %}
+          <div style="display:flex;flex-wrap:wrap;gap:var(--sp-1);">
+            {% if contact.tone %}
+              {{ badge(contact.tone, 'blue') }}
+            {% else %}
+              <span style="color:var(--text-disabled);">Default</span>
+            {% endif %}
+            {% if contact.is_teammate %}
+              {{ badge('Teammate', 'green') }}
+            {% endif %}
+          </div>
         </td>
         <td style="color:var(--text-secondary);max-width:240px;" class="truncate">{{ contact.notes or '—' }}</td>
         <td style="text-align:right;">

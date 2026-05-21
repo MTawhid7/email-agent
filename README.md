@@ -31,11 +31,12 @@ The app packages as a native desktop application (`.app` on macOS, `.exe` on Win
 | **Auto-Translate** | Detect incoming email language and reply in the same language |
 | **Attachment Summarisation** | PDFs and images summarised via Gemini Files API and injected into reply context |
 | **Bulk Send** | Generate personalised drafts for multiple recipients — enter manually, upload a CSV, or pick from saved contacts |
-| **Contact Management** | Per-contact notes and tone preferences; add individually or import from CSV; used in bulk send recipient picker |
+| **Contact Management** | Per-contact notes and tone preferences; mark contacts as Teammates; add individually, import from CSV, or select in bulk send |
+| **Teammate-Aware Skipping** | Automatically skips emails where you are only CC'd — distinguishes observer threads from emails that need a reply |
 | **Social Link Icons** | Brand icons (LinkedIn, GitHub, WhatsApp, etc.) in email signature via jsDelivr CDN |
 | **Knowledge Base** | Free-form facts injected into every AI prompt — prevents hallucinated phone numbers / contact details |
 | **Review Status Tracking** | Activity log reflects pending → sent / discarded state after user action |
-| **Desktop App** | Packaged as `.app` / `.exe` via PyInstaller — no terminal required for end users |
+| **Desktop App** | Packaged as `.app` / `.exe` via PyInstaller — no terminal required for end users; new version auto-evicts the old process on launch |
 
 ---
 
@@ -166,6 +167,15 @@ This is a one-time step. Subsequent launches open normally.
 
 > **Updating:** Each build has a unique bundle identifier, so macOS treats new versions as distinct apps and shows the security prompt once per version rather than showing a stale-cache error.
 
+### Updating on Windows
+
+When you launch a new version, it automatically signals the old process to exit and claims port 5001. If you are on an older build that does not yet have this behaviour, kill the old process manually first:
+
+1. Press **Ctrl + Shift + Esc** to open Task Manager
+2. Find `Email Agent.exe` in the list
+3. Right-click → **End Task**
+4. Launch the new version normally
+
 ### Build locally
 
 ```bash
@@ -196,6 +206,8 @@ All settings are managed through the web UI (Settings page) and stored in:
 | Persona instructions | How the AI should write on your behalf |
 | Knowledge Base | Factual grounding — real phone, email, availability, company info |
 | Auto-translate | Detect incoming language and reply in the same language |
+| Your Email Address | Your Gmail address — used to detect whether you are To: or only CC: on an email |
+| Team Domain | e.g. `yourcompany.com` — all senders from this domain are treated as teammates |
 | Signature | Name, title, company, phone, social links with brand icons |
 
 ---

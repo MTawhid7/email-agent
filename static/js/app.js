@@ -61,22 +61,29 @@ document.addEventListener('alpine:init', () => {
       this.toggling = true;
       this.error = null;
 
-      const endpoint = this.running ? '/api/agent/stop' : '/api/agent/start';
+      const stopping = this.running;
+      const endpoint = stopping ? '/api/agent/stop' : '/api/agent/start';
       try {
         const res = await fetch(endpoint, { method: 'POST' });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        // /api/agent/stop waits for the thread to exit and returns the
+        // authoritative running state — use it directly instead of polling.
+        if (stopping && 'running' in data) {
+          this.running = data.running;
+          this.toggling = false;
+          return;
+        }
       } catch (e) {
         showToast('Request failed: ' + e.message, 'error');
         this.toggling = false;
         return;
       }
 
-      // Poll three times at short intervals so errors surface quickly.
-      // toggling is ALWAYS released at the end — no complex exit conditions.
+      // Start path: daemon launches near-instantly; a couple of polls suffice.
       const sleep = ms => new Promise(r => setTimeout(r, ms));
       await sleep(600);  await this.refresh();
       await sleep(600);  await this.refresh();
-      await sleep(800);  await this.refresh();
       this.toggling = false;
     },
 

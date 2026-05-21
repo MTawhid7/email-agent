@@ -60,6 +60,13 @@ class AgentDaemon:
         self._stop_event.set()
         self._append_log("info", "Agent stopped.")
 
+    def wait_for_stop(self, timeout: float = 3.0) -> None:
+        """Block until the daemon thread exits or timeout elapses."""
+        with self._lock:
+            t = self._thread
+        if t and t.is_alive():
+            t.join(timeout=timeout)
+
     @property
     def is_running(self) -> bool:
         with self._lock:
@@ -95,7 +102,7 @@ class AgentDaemon:
         while not self._stop_event.is_set():
             sleep_seconds = settings.poll_interval_seconds
             try:
-                count = self._process_unread(gmail, generator, contact_store, signature_html)
+                count = self._process_unread(gmail, generator, contact_store, signature_html, settings)
                 if not count:
                     self._append_log("info", "No new emails.")
                 else:
@@ -129,12 +136,38 @@ class AgentDaemon:
         signature_html = SignatureBuilder(settings).build_html()
         return settings, gmail, generator, contact_store, signature_html
 
+    def _should_skip_as_observer(self, parsed, contact, settings) -> tuple[bool, str]:
+        """
+        Returns (True, reason) when the agent user should not reply because they are
+        an observer (only CC'd) or because a teammate is keeping them informed.
+        Runs before any Gemini API call to avoid wasting tokens.
+        """
+        own = (settings.own_email or "").lower().strip()
+        team_domain = (settings.team_domain or "").lower().strip()
+        sender_domain = parsed.sender_email.split("@")[-1].lower() if "@" in parsed.sender_email else ""
+        sender_is_teammate = bool(
+            (team_domain and sender_domain == team_domain)
+            or (contact and getattr(contact, "is_teammate", False))
+        )
+        if own:
+            user_in_to = any(own in addr for addr in parsed.to_addresses)
+            user_in_cc = any(own in addr for addr in parsed.cc_addresses)
+            user_only_cc = user_in_cc and not user_in_to
+        else:
+            user_only_cc = False  # can't determine without own_email configured
+        if sender_is_teammate and user_only_cc:
+            return True, "CC'd on teammate's outbound thread"
+        if not sender_is_teammate and user_only_cc:
+            return True, "CC'd as observer — not primary addressee"
+        return False, ""
+
     def _process_unread(
         self,
         gmail: GmailClient,
         generator: ReplyGenerator,
         contact_store: ContactStore,
         signature_html: str,
+        settings,
     ) -> int:
         thread_ids = gmail.list_unread_thread_ids(max_results=20)
         count = 0
@@ -147,6 +180,13 @@ class AgentDaemon:
                     continue
 
                 contact = contact_store.lookup(parsed.sender_email)
+
+                # ── Teammate / observer skip (before any Gemini call) ──────────
+                should_skip, skip_reason = self._should_skip_as_observer(parsed, contact, settings)
+                if should_skip:
+                    gmail.mark_as_processed(parsed.latest_message_id)
+                    self._append_log("info", f"⏭ Skipped ({skip_reason}): {parsed.sender_name}", priority="skip")
+                    continue
 
                 # ── Feature 4: Thread summary ──────────────────────────────────
                 summary = generator.summarise(build_summary_prompt(parsed))

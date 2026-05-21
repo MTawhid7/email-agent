@@ -13,7 +13,8 @@ class ContactProfile:
     company: str = ""
     relationship_type: str = ""
     notes: str = ""
-    tone: str = ""   # Formal / Professional / Casual / Brief — overrides global persona
+    tone: str = ""          # Formal / Professional / Casual / Brief — overrides global persona
+    is_teammate: bool = False  # skip emails from this person when user is only CC'd
 
 
 class ContactStore:

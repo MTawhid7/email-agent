@@ -31,6 +31,7 @@ def contacts_add():
         relationship_type=request.form.get("relationship_type", "").strip(),
         notes=request.form.get("notes", "").strip(),
         tone=request.form.get("tone", "").strip(),
+        is_teammate=request.form.get("is_teammate") == "true",
     )
     _store().upsert(profile)
     return redirect(url_for("contacts.contacts"))
@@ -49,6 +50,7 @@ def contacts_import():
         email = row.get("email", "").strip()
         if not email:
             continue
+        raw_teammate = row.get("is_teammate", "").strip().lower()
         profile = ContactProfile(
             email=email,
             name=row.get("name", "").strip(),
@@ -56,6 +58,7 @@ def contacts_import():
             relationship_type=row.get("relationship_type", "").strip(),
             notes=row.get("notes", "").strip(),
             tone=row.get("tone", "").strip(),
+            is_teammate=raw_teammate in ("true", "1", "yes"),
         )
         store.upsert(profile)
     return redirect(url_for("contacts.contacts"))

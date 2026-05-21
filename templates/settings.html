@@ -36,6 +36,22 @@
     </div>
   </div>
 
+  {# ── Team & Identity ─────────────────────────────────────────────────── #}
+  <div class="card card-lg">
+    <div class="card-section-title">Team &amp; Identity</div>
+    <p class="hint" style="margin-bottom:var(--sp-4);">Helps the agent skip emails where you are CC'd as an observer — for example, when a teammate sends to an external company and copies you for visibility.</p>
+    <div style="display:flex;flex-direction:column;gap:var(--sp-4);">
+      {{ input_field('own_email', 'Your Email Address', type='email',
+          value=config.get('own_email',''),
+          placeholder='you@yourcompany.com',
+          hint='Your connected Gmail address. Used to detect whether you are in To: or only CC: on incoming emails.') }}
+      {{ input_field('team_domain', 'Team Domain',
+          value=config.get('team_domain',''),
+          placeholder='yourcompany.com',
+          hint='Emails from this domain are treated as internal teammates. Leave blank if you prefer to mark teammates individually in Contacts.') }}
+    </div>
+  </div>
+
   {# ── Knowledge Base ───────────────────────────────────────────────────── #}
   <div class="card card-lg">
     <div class="card-section-title">Knowledge Base</div>

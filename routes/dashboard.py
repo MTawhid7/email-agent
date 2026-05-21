@@ -31,6 +31,16 @@ def agent_start():
 @dashboard_bp.route("/api/agent/stop", methods=["POST"])
 def agent_stop():
     app_module.daemon.stop()
+    app_module.daemon.wait_for_stop(timeout=3.0)
+    return jsonify({"ok": True, "running": app_module.daemon.is_running})
+
+
+@dashboard_bp.route("/api/shutdown", methods=["POST"])
+def shutdown():
+    """Signal the Flask process to exit. Used by a new instance to evict a stale one."""
+    import os, threading
+    app_module.daemon.stop()
+    threading.Timer(0.3, lambda: os._exit(0)).start()
     return jsonify({"ok": True})
 
 

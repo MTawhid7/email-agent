@@ -8,6 +8,8 @@ import platform
 import socket
 import sys
 import threading
+import time
+import urllib.request
 import webbrowser
 from pathlib import Path
 
@@ -24,6 +26,41 @@ def get_data_dir() -> Path:
         # Linux / development fallback
         base = Path(__file__).parent / "data"
     return base
+
+
+def _try_shutdown_old_instance(port: int = 5001) -> None:
+    """
+    If another Email Agent is already running on the preferred port, ask it to shut
+    down and wait up to 5 s for the port to become free. Safe to call when nothing
+    is running on that port.
+    """
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+        probe.settimeout(0.5)
+        try:
+            probe.connect(("127.0.0.1", port))
+        except (ConnectionRefusedError, OSError):
+            return  # port is free — nothing to do
+
+    # Port is occupied — ask the old instance to exit gracefully
+    try:
+        req = urllib.request.Request(
+            f"http://localhost:{port}/api/shutdown", method="POST"
+        )
+        urllib.request.urlopen(req, timeout=2)
+    except Exception:
+        pass  # old version may not have this endpoint — fall through to wait
+
+    # Wait up to 5 s for the port to become free
+    for _ in range(10):
+        time.sleep(0.5)
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            try:
+                s.bind(("127.0.0.1", port))
+                return  # success
+            except OSError:
+                continue
+    # Port still occupied — find_free_port will pick the next candidate
 
 
 def find_free_port(candidates: list[int]) -> int:
@@ -45,7 +82,8 @@ def main() -> None:
     data_dir.mkdir(parents=True, exist_ok=True)
     os.environ["EMAIL_AGENT_DATA_DIR"] = str(data_dir)
 
-    # 2. Find an available port
+    # 2. Signal any stale instance on the preferred port to exit, then claim it
+    _try_shutdown_old_instance(5001)
     port = find_free_port([5001, 5002, 5003, 5004, 5005])
 
     # 3. Open the browser after a short delay to let Flask start first

@@ -22,6 +22,8 @@ class Settings:
     social_links: tuple
     auto_translate: bool = False
     context_facts: str = ""    # factual grounding — injected into AI system prompt
+    own_email: str = ""        # agent user's Gmail address — used to detect To: vs CC:
+    team_domain: str = ""      # e.g. "technyx.com" — senders from this domain are teammates
 
 
 def _require(key: str) -> str:
@@ -97,6 +99,8 @@ def load_settings_from_dict(data: dict) -> Settings:
         social_links=_parse_social_links(data),
         auto_translate=str(data.get("auto_translate", "false")).lower() in ("true", "1", "yes"),
         context_facts=optional("context_facts"),
+        own_email=optional("own_email"),
+        team_domain=optional("team_domain"),
     )
 
 

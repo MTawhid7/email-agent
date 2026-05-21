@@ -32,7 +32,9 @@ class ParsedEmail:
     message_id_header: str
     thread_id: str
     thread_messages: tuple
-    attachments: tuple = ()   # tuple of AttachmentInfo
+    attachments: tuple = ()     # tuple of AttachmentInfo
+    to_addresses: tuple = ()    # lowercase emails from To: header of latest message
+    cc_addresses: tuple = ()    # lowercase emails from CC: header of latest message
 
 
 def parse_thread(thread: dict) -> Optional[ParsedEmail]:
@@ -55,6 +57,8 @@ def parse_thread(thread: dict) -> Optional[ParsedEmail]:
     subject = latest_headers.get("subject", "(no subject)")
     message_id_header = latest_headers.get("message-id", "")
     attachments = tuple(_extract_attachments(latest_msg))
+    to_addresses = _parse_address_emails(latest_headers.get("to", ""))
+    cc_addresses = _parse_address_emails(latest_headers.get("cc", ""))
 
     return ParsedEmail(
         sender_name=sender_name,
@@ -67,6 +71,8 @@ def parse_thread(thread: dict) -> Optional[ParsedEmail]:
         thread_id=thread_id,
         thread_messages=tuple(parsed_messages),
         attachments=attachments,
+        to_addresses=to_addresses,
+        cc_addresses=cc_addresses,
     )
 
 
@@ -75,6 +81,12 @@ def parse_thread(thread: dict) -> Optional[ParsedEmail]:
 def _header_map(message: dict) -> dict[str, str]:
     headers = message.get("payload", {}).get("headers", [])
     return {h["name"].lower(): h["value"] for h in headers}
+
+
+def _parse_address_emails(header_value: str) -> tuple[str, ...]:
+    """Extract bare lowercase email addresses from a To:/CC: header value."""
+    emails = re.findall(r"[\w.+\-]+@[\w.\-]+\.\w+", header_value)
+    return tuple(e.lower() for e in emails)
 
 
 def _parse_address(address: str) -> tuple[str, str]:
