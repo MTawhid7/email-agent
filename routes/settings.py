@@ -1,6 +1,7 @@
 import app as app_module
-from flask import Blueprint, redirect, render_template, request, flash, url_for
-from storage.app_config import load_config, save_config, config_exists
+from pathlib import Path
+from flask import Blueprint, jsonify, redirect, render_template, request, flash, url_for
+from storage.app_config import load_config, save_config, config_exists, get_token_path
 
 settings_bp = Blueprint("settings", __name__)
 
@@ -8,6 +9,7 @@ settings_bp = Blueprint("settings", __name__)
 @settings_bp.route("/settings", methods=["GET", "POST"])
 def settings():
     existing = load_config() if config_exists() else {}
+    gmail_connected = Path(get_token_path()).exists()
 
     if request.method == "POST":
         try:
@@ -33,10 +35,10 @@ def settings():
 
         if not updated["gemini_api_key"]:
             flash("Gemini API key is required.", "error")
-            return render_template("settings.html", config=updated)
+            return render_template("settings.html", config=updated, gmail_connected=gmail_connected)
         if not updated["signature_name"]:
             flash("Your name is required.", "error")
-            return render_template("settings.html", config=updated)
+            return render_template("settings.html", config=updated, gmail_connected=gmail_connected)
 
         save_config(updated)
 
@@ -68,4 +70,20 @@ def settings():
         if migrated:
             existing["social_links"] = migrated
 
-    return render_template("settings.html", config=existing)
+    return render_template("settings.html", config=existing, gmail_connected=gmail_connected)
+
+
+@settings_bp.route("/api/auth/switch", methods=["POST"])
+def auth_switch():
+    """
+    Stop the daemon, delete the OAuth token, and start a fresh OAuth flow.
+    Works for both 'switch account' (deletes existing token) and
+    'connect Gmail' (no token to delete) cases.
+    """
+    from routes.setup import start_oauth_thread
+    app_module.daemon.stop()
+    token = Path(get_token_path())
+    if token.exists():
+        token.unlink()
+    start_oauth_thread()
+    return jsonify({"ok": True})

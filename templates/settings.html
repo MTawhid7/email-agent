@@ -107,4 +107,86 @@
   </div>
 
 </form>
+
+{# ── Gmail Account ─────────────────────────────────────────────────────────── #}
+<div class="card card-lg" style="max-width:680px;">
+  <div class="card-section-title">Gmail Account</div>
+
+  <div style="display:flex;align-items:center;justify-content:space-between;gap:var(--sp-4);">
+    <div>
+      {% if gmail_connected %}
+        <div style="display:flex;align-items:center;gap:var(--sp-2);margin-bottom:var(--sp-1);">
+          <span style="width:8px;height:8px;border-radius:50%;background:var(--status-success);display:inline-block;flex-shrink:0;"></span>
+          <span style="font-weight:500;color:var(--text-primary);">Connected</span>
+        </div>
+        <p style="font-size:var(--text-sm);color:var(--text-tertiary);">
+          To use a different Google account, click <strong>Switch Account</strong>. A sign-in window will open in your browser.
+        </p>
+      {% else %}
+        <div style="display:flex;align-items:center;gap:var(--sp-2);margin-bottom:var(--sp-1);">
+          <span style="width:8px;height:8px;border-radius:50%;background:var(--status-error);display:inline-block;flex-shrink:0;"></span>
+          <span style="font-weight:500;color:var(--text-primary);">Not connected</span>
+        </div>
+        <p style="font-size:var(--text-sm);color:var(--text-tertiary);">
+          Connect your Gmail account to enable the email agent.
+        </p>
+      {% endif %}
+    </div>
+
+    {% if gmail_connected %}
+      <button type="button" onclick="startGmailConnect(true)" class="btn btn-ghost"
+        style="color:var(--status-error);flex-shrink:0;">
+        Switch Account
+      </button>
+    {% else %}
+      <button type="button" onclick="startGmailConnect(false)" class="btn btn-primary"
+        style="flex-shrink:0;">
+        Connect Gmail
+      </button>
+    {% endif %}
+  </div>
+
+  <div id="oauth-status" style="display:none;margin-top:var(--sp-4);"></div>
+</div>
+
+{% block scripts %}
+<script>
+function startGmailConnect(switchAccount) {
+  if (switchAccount && !confirm('This will sign out of the current Gmail account and open a browser sign-in window. Continue?')) return;
+
+  const el = document.getElementById('oauth-status');
+  el.style.display = 'block';
+  el.innerHTML = '<div style="display:flex;align-items:center;gap:10px;font-size:var(--text-sm);color:var(--text-secondary);">'
+    + '<div style="width:16px;height:16px;border:2px solid var(--border-default);border-top-color:var(--accent);border-radius:50%;animation:spin 0.8s linear infinite;flex-shrink:0;"></div>'
+    + 'Waiting for sign-in in your browser…</div>';
+
+  fetch('/api/auth/switch', { method: 'POST' })
+    .then(r => r.json())
+    .then(() => pollOAuth())
+    .catch(() => {
+      el.innerHTML = '<div class="alert alert-error">Could not start sign-in. Please try again.</div>';
+    });
+}
+
+function pollOAuth() {
+  fetch('/setup/api/oauth_status')
+    .then(r => r.json())
+    .then(data => {
+      const el = document.getElementById('oauth-status');
+      if (data.done) {
+        el.innerHTML = '<div class="alert alert-success">'
+          + '<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>'
+          + '<span>Gmail connected! <a href="/dashboard" style="color:inherit;font-weight:600;margin-left:6px;">Go to Dashboard →</a></span></div>';
+        fetch('/api/agent/start', { method: 'POST' });
+      } else if (data.error) {
+        el.innerHTML = '<div class="alert alert-error">Sign-in failed: ' + data.error + '</div>';
+      } else {
+        setTimeout(pollOAuth, 2000);
+      }
+    })
+    .catch(() => setTimeout(pollOAuth, 3000));
+}
+</script>
+{% endblock %}
+
 {% endblock %}
