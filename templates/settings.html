@@ -80,16 +80,28 @@
   {# ── Smart Filtering ──────────────────────────────────────────────────── #}
   <div class="card card-lg">
     <div class="card-section-title">Smart Filtering</div>
-    <p class="hint" style="margin-bottom:var(--sp-4);">
-      The agent automatically detects your connected Gmail address and uses it to
-      recognise when you are CC'd or BCC'd as an observer — for example, when a
-      teammate sends to an external company and copies you for visibility. It will
-      skip those threads instead of generating an unwanted reply.
-    </p>
-    {{ input_field('team_domain', 'Team Domain',
+
+    <div style="display:flex;flex-direction:column;gap:var(--sp-3);margin-bottom:var(--sp-4);">
+      <p style="font-size:var(--text-sm);color:var(--text-secondary);margin:0;">
+        The agent uses two layers to avoid sending unwanted replies:
+      </p>
+      <ul style="font-size:var(--text-sm);color:var(--text-secondary);margin:0;padding-left:var(--sp-5);line-height:1.7;">
+        <li><strong>CC / BCC detection</strong> — your connected Gmail address is auto-detected. When an email arrives and you are only CC'd or BCC'd (not the primary recipient in To:), the thread is skipped.</li>
+        <li><strong>AI reasoning</strong> — Gemini analyses each email and decides whether it actually needs a reply from you (e.g. a direct question or request), or is purely informational (FYI, announcement, confirmation receipt).</li>
+      </ul>
+    </div>
+
+    {{ input_field('team_domain', 'Company Domain',
         value=config.get('team_domain',''),
         placeholder='yourcompany.com',
-        hint='All senders from this domain are treated as internal teammates. Leave blank if you prefer to mark teammates individually in Contacts.') }}
+        hint='Enter your company\'s email domain (e.g. technyx.com). All senders from this domain are automatically treated as teammates — if you are only CC\'d on their emails, the agent will skip them.') }}
+
+    <div style="margin-top:var(--sp-4);padding:var(--sp-3);background:var(--bg-elevated);border-radius:var(--r-md);font-size:var(--text-sm);color:var(--text-secondary);">
+      <strong style="color:var(--text-primary);">Teammates with personal email addresses</strong>
+      (e.g. Gmail, Outlook personal) are not covered by the domain rule. Go to
+      <a href="/contacts" style="color:var(--accent);">Contacts</a>, add them, and tick the
+      <strong>Teammate</strong> checkbox — the agent will then skip their emails when you are CC'd.
+    </div>
   </div>
 
   {# ── Knowledge Base ───────────────────────────────────────────────────── #}

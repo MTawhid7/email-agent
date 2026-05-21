@@ -34,12 +34,12 @@ class ReplyGenerator:
 
     def classify(self, user_message: str) -> dict:
         """
-        Classify an email's priority. Returns {"priority", "reason", "skip"}.
-        Never raises — falls back to normal on any error.
+        Classify an email's priority and whether it needs a reply.
+        Returns {"priority", "reason", "skip", "needs_reply"}.
+        Never raises — falls back to normal/needs_reply:true on any error.
         """
         try:
             text = self._call(user_message, system="You are an email classifier. Return JSON only.")
-            # Strip markdown fences if present
             if "```" in text:
                 text = text.split("```")[1]
                 if text.startswith("json"):
@@ -48,9 +48,16 @@ class ReplyGenerator:
             priority = str(data.get("priority", "normal")).lower()
             if priority not in ("high", "normal", "low", "skip"):
                 priority = "normal"
-            return {"priority": priority, "reason": data.get("reason", ""), "skip": priority == "skip"}
+            # Default needs_reply to True so a parse failure never silently drops an email
+            needs_reply = bool(data.get("needs_reply", True))
+            return {
+                "priority": priority,
+                "reason": data.get("reason", ""),
+                "skip": priority == "skip",
+                "needs_reply": needs_reply,
+            }
         except Exception:
-            return {"priority": "normal", "reason": "", "skip": False}
+            return {"priority": "normal", "reason": "", "skip": False, "needs_reply": True}
 
     def summarise(self, user_message: str) -> str:
         """Generate a one-sentence thread summary. Never raises."""

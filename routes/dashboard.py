@@ -31,8 +31,9 @@ def agent_start():
 @dashboard_bp.route("/api/agent/stop", methods=["POST"])
 def agent_stop():
     app_module.daemon.stop()
-    app_module.daemon.wait_for_stop(timeout=3.0)
-    return jsonify({"ok": True, "running": app_module.daemon.is_running})
+    # Return running:false immediately — the stop event is set so no new work will start.
+    # Waiting for thread.join() would block for the duration of any in-flight Gemini call.
+    return jsonify({"ok": True, "running": False})
 
 
 @dashboard_bp.route("/api/shutdown", methods=["POST"])

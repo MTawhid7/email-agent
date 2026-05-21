@@ -86,22 +86,35 @@ def build_user_message(
     )
 
 
-def build_classification_prompt(parsed: ParsedEmail, contact: Optional[ContactProfile]) -> str:
+def build_classification_prompt(
+    parsed: ParsedEmail,
+    contact: Optional[ContactProfile],
+    own_email: str = "",
+) -> str:
+    to_line = ", ".join(parsed.to_addresses) if parsed.to_addresses else "unknown"
+    cc_line = ", ".join(parsed.cc_addresses) if parsed.cc_addresses else "none"
+    own_line = f"My email: {own_email}\n" if own_email else ""
     return (
-        "Classify this email into exactly one priority category.\n\n"
+        "Classify this email and determine whether it requires a reply.\n\n"
+        f"{own_line}"
+        f"To: {to_line}\n"
+        f"CC: {cc_line}\n"
         f"Sender: {parsed.sender_name} <{parsed.sender_email}>\n"
         f"Subject: {parsed.subject}\n"
         f"Known contact: {contact is not None}\n"
-        f"Email body (first 600 chars): {parsed.latest_body[:600]}\n\n"
-        "Categories:\n"
-        "- high: known VIP, urgent keywords (urgent, ASAP, deadline, critical), direct personal question\n"
-        "- normal: standard business email, polite inquiry that needs a reply\n"
-        "- low: company-wide announcement, FYI, low urgency\n"
-        "- skip: newsletter, marketing, automated notification, no personal greeting, "
-        "contains 'unsubscribe', 'you are receiving this', 'manage preferences', "
-        "or is clearly bulk/promotional\n\n"
+        f"Email body (first 600 chars):\n{parsed.latest_body[:600]}\n\n"
+        "1. Priority — pick exactly one:\n"
+        "   - high: urgent keywords (urgent, ASAP, deadline, critical), VIP sender, direct personal ask\n"
+        "   - normal: standard business email that warrants a reply\n"
+        "   - low: FYI, company-wide announcement, low urgency\n"
+        "   - skip: newsletter, marketing, automated notification, bulk/promotional, "
+        "contains 'unsubscribe' / 'you are receiving this' / 'manage preferences'\n\n"
+        "2. needs_reply — true or false:\n"
+        "   - true: email contains a direct question, request, or action item addressed to me\n"
+        "   - false: purely informational (FYI, announcement, confirmation receipt, "
+        "out-of-office, group update where no individual reply is expected)\n\n"
         "Return JSON only, no markdown fences:\n"
-        '{"priority": "high|normal|low|skip", "reason": "one sentence"}'
+        '{"priority": "high|normal|low|skip", "needs_reply": true, "reason": "one sentence"}'
     )
 
 

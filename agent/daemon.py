@@ -210,11 +210,14 @@ class AgentDaemon:
                 # ── Feature 4: Thread summary ──────────────────────────────────
                 summary = generator.summarise(build_summary_prompt(parsed))
 
-                # ── Feature 2: Classify + newsletter detection ─────────────────
-                classification = generator.classify(build_classification_prompt(parsed, contact))
+                # ── Feature 2: Classify + newsletter / no-reply detection ─────
+                own_email = settings.own_email or self._detected_email or ""
+                classification = generator.classify(
+                    build_classification_prompt(parsed, contact, own_email=own_email)
+                )
                 priority = classification["priority"]
 
-                if classification["skip"]:
+                if classification["skip"] or not classification.get("needs_reply", True):
                     gmail.mark_as_processed(parsed.latest_message_id)
                     self._append_log(
                         "info",
