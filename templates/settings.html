@@ -5,6 +5,47 @@
 {% block content %}
 {{ page_header('Settings', 'Configure your AI persona, signature, and preferences.') }}
 
+{# ── Gmail Account (outside form — OAuth flow) ────────────────────────────── #}
+<div class="card card-lg" style="max-width:680px;margin-bottom:var(--sp-5);">
+  <div class="card-section-title">Gmail Account</div>
+
+  <div style="display:flex;align-items:center;justify-content:space-between;gap:var(--sp-4);">
+    <div>
+      {% if gmail_connected %}
+        <div style="display:flex;align-items:center;gap:var(--sp-2);margin-bottom:var(--sp-1);">
+          <span style="width:8px;height:8px;border-radius:50%;background:var(--status-success);display:inline-block;flex-shrink:0;"></span>
+          <span style="font-weight:500;color:var(--text-primary);">Connected{% if detected_email %} as {{ detected_email }}{% endif %}</span>
+        </div>
+        <p style="font-size:var(--text-sm);color:var(--text-tertiary);">
+          To use a different Google account, click <strong>Switch Account</strong>. A sign-in window will open in your browser.
+        </p>
+      {% else %}
+        <div style="display:flex;align-items:center;gap:var(--sp-2);margin-bottom:var(--sp-1);">
+          <span style="width:8px;height:8px;border-radius:50%;background:var(--status-error);display:inline-block;flex-shrink:0;"></span>
+          <span style="font-weight:500;color:var(--text-primary);">Not connected</span>
+        </div>
+        <p style="font-size:var(--text-sm);color:var(--text-tertiary);">
+          Connect your Gmail account to enable the email agent.
+        </p>
+      {% endif %}
+    </div>
+
+    {% if gmail_connected %}
+      <button type="button" onclick="startGmailConnect(true)" class="btn btn-ghost"
+        style="color:var(--status-error);flex-shrink:0;">
+        Switch Account
+      </button>
+    {% else %}
+      <button type="button" onclick="startGmailConnect(false)" class="btn btn-primary"
+        style="flex-shrink:0;">
+        Connect Gmail
+      </button>
+    {% endif %}
+  </div>
+
+  <div id="oauth-status" style="display:none;margin-top:var(--sp-4);"></div>
+</div>
+
 <form method="POST" style="display:flex;flex-direction:column;gap:var(--sp-5);max-width:680px;">
 
   {# ── AI Configuration ──────────────────────────────────────────────────── #}
@@ -36,20 +77,19 @@
     </div>
   </div>
 
-  {# ── Team & Identity ─────────────────────────────────────────────────── #}
+  {# ── Smart Filtering ──────────────────────────────────────────────────── #}
   <div class="card card-lg">
-    <div class="card-section-title">Team &amp; Identity</div>
-    <p class="hint" style="margin-bottom:var(--sp-4);">Helps the agent skip emails where you are CC'd as an observer — for example, when a teammate sends to an external company and copies you for visibility.</p>
-    <div style="display:flex;flex-direction:column;gap:var(--sp-4);">
-      {{ input_field('own_email', 'Your Email Address', type='email',
-          value=config.get('own_email',''),
-          placeholder='you@yourcompany.com',
-          hint='Your connected Gmail address. Used to detect whether you are in To: or only CC: on incoming emails.') }}
-      {{ input_field('team_domain', 'Team Domain',
-          value=config.get('team_domain',''),
-          placeholder='yourcompany.com',
-          hint='Emails from this domain are treated as internal teammates. Leave blank if you prefer to mark teammates individually in Contacts.') }}
-    </div>
+    <div class="card-section-title">Smart Filtering</div>
+    <p class="hint" style="margin-bottom:var(--sp-4);">
+      The agent automatically detects your connected Gmail address and uses it to
+      recognise when you are CC'd or BCC'd as an observer — for example, when a
+      teammate sends to an external company and copies you for visibility. It will
+      skip those threads instead of generating an unwanted reply.
+    </p>
+    {{ input_field('team_domain', 'Team Domain',
+        value=config.get('team_domain',''),
+        placeholder='yourcompany.com',
+        hint='All senders from this domain are treated as internal teammates. Leave blank if you prefer to mark teammates individually in Contacts.') }}
   </div>
 
   {# ── Knowledge Base ───────────────────────────────────────────────────── #}
@@ -62,7 +102,7 @@
         hint='Facts the AI will always treat as accurate — phone numbers, email, availability, company details. One fact per line. Prevents the AI from hallucinating contact information.') }}
   </div>
 
-  {# ── Signature ─────────────────────────────────────────────────────────── #}
+  {# ── Email Signature ───────────────────────────────────────────────────── #}
   <div class="card card-lg">
     <div class="card-section-title">Email Signature</div>
 
@@ -123,47 +163,6 @@
   </div>
 
 </form>
-
-{# ── Gmail Account ─────────────────────────────────────────────────────────── #}
-<div class="card card-lg" style="max-width:680px;">
-  <div class="card-section-title">Gmail Account</div>
-
-  <div style="display:flex;align-items:center;justify-content:space-between;gap:var(--sp-4);">
-    <div>
-      {% if gmail_connected %}
-        <div style="display:flex;align-items:center;gap:var(--sp-2);margin-bottom:var(--sp-1);">
-          <span style="width:8px;height:8px;border-radius:50%;background:var(--status-success);display:inline-block;flex-shrink:0;"></span>
-          <span style="font-weight:500;color:var(--text-primary);">Connected</span>
-        </div>
-        <p style="font-size:var(--text-sm);color:var(--text-tertiary);">
-          To use a different Google account, click <strong>Switch Account</strong>. A sign-in window will open in your browser.
-        </p>
-      {% else %}
-        <div style="display:flex;align-items:center;gap:var(--sp-2);margin-bottom:var(--sp-1);">
-          <span style="width:8px;height:8px;border-radius:50%;background:var(--status-error);display:inline-block;flex-shrink:0;"></span>
-          <span style="font-weight:500;color:var(--text-primary);">Not connected</span>
-        </div>
-        <p style="font-size:var(--text-sm);color:var(--text-tertiary);">
-          Connect your Gmail account to enable the email agent.
-        </p>
-      {% endif %}
-    </div>
-
-    {% if gmail_connected %}
-      <button type="button" onclick="startGmailConnect(true)" class="btn btn-ghost"
-        style="color:var(--status-error);flex-shrink:0;">
-        Switch Account
-      </button>
-    {% else %}
-      <button type="button" onclick="startGmailConnect(false)" class="btn btn-primary"
-        style="flex-shrink:0;">
-        Connect Gmail
-      </button>
-    {% endif %}
-  </div>
-
-  <div id="oauth-status" style="display:none;margin-top:var(--sp-4);"></div>
-</div>
 
 {% block scripts %}
 <script>

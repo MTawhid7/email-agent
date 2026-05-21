@@ -10,6 +10,7 @@ settings_bp = Blueprint("settings", __name__)
 def settings():
     existing = load_config() if config_exists() else {}
     gmail_connected = Path(get_token_path()).exists()
+    detected_email = existing.get("own_email", "")
 
     if request.method == "POST":
         try:
@@ -31,16 +32,16 @@ def settings():
             "social_links": _parse_social_links_from_form(request.form),
             "auto_translate": request.form.get("auto_translate") == "true",
             "context_facts": request.form.get("context_facts", "").strip(),
-            "own_email": request.form.get("own_email", "").strip().lower(),
+            "own_email": existing.get("own_email", ""),   # auto-detected, not submitted by form
             "team_domain": request.form.get("team_domain", "").strip().lower().lstrip("@"),
         }
 
         if not updated["gemini_api_key"]:
             flash("Gemini API key is required.", "error")
-            return render_template("settings.html", config=updated, gmail_connected=gmail_connected)
+            return render_template("settings.html", config=updated, gmail_connected=gmail_connected, detected_email=detected_email)
         if not updated["signature_name"]:
             flash("Your name is required.", "error")
-            return render_template("settings.html", config=updated, gmail_connected=gmail_connected)
+            return render_template("settings.html", config=updated, gmail_connected=gmail_connected, detected_email=detected_email)
 
         save_config(updated)
 
@@ -72,7 +73,7 @@ def settings():
         if migrated:
             existing["social_links"] = migrated
 
-    return render_template("settings.html", config=existing, gmail_connected=gmail_connected)
+    return render_template("settings.html", config=existing, gmail_connected=gmail_connected, detected_email=detected_email)
 
 
 @settings_bp.route("/api/auth/switch", methods=["POST"])

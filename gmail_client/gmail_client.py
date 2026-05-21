@@ -108,6 +108,13 @@ class GmailClient:
             )
         )
 
+    def get_own_email(self) -> str:
+        """Return the Gmail address of the authenticated account."""
+        profile = self._execute(
+            self._service.users().getProfile(userId="me")
+        )
+        return profile.get("emailAddress", "")
+
     def get_attachment(self, message_id: str, attachment_id: str) -> bytes:
         """Download an attachment and return its bytes."""
         import base64 as b64

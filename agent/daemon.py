@@ -42,6 +42,7 @@ class AgentDaemon:
         self._draft_count_today: int = 0
         self._draft_count_date: date = date.today()
         self._error: Optional[str] = None
+        self._detected_email: str = ""   # auto-fetched from Gmail API on first run
 
     # ── Public API ─────────────────────────────────────────────────────────────
 
@@ -134,6 +135,20 @@ class AgentDaemon:
         generator = ReplyGenerator(settings)
         contact_store = ContactStore(path=get_contacts_path())
         signature_html = SignatureBuilder(settings).build_html()
+
+        # Auto-detect the connected Gmail address once; save it so Settings can display it.
+        if not settings.own_email:
+            try:
+                detected = gmail.get_own_email().lower()
+                if detected:
+                    self._detected_email = detected
+                    from storage.app_config import merge_and_save_config
+                    merge_and_save_config({"own_email": detected})
+            except Exception:
+                pass
+        else:
+            self._detected_email = settings.own_email
+
         return settings, gmail, generator, contact_store, signature_html
 
     def _should_skip_as_observer(self, parsed, contact, settings) -> tuple[bool, str]:
@@ -142,7 +157,7 @@ class AgentDaemon:
         an observer (only CC'd) or because a teammate is keeping them informed.
         Runs before any Gemini API call to avoid wasting tokens.
         """
-        own = (settings.own_email or "").lower().strip()
+        own = (settings.own_email or self._detected_email or "").lower().strip()
         team_domain = (settings.team_domain or "").lower().strip()
         sender_domain = parsed.sender_email.split("@")[-1].lower() if "@" in parsed.sender_email else ""
         sender_is_teammate = bool(
@@ -152,13 +167,17 @@ class AgentDaemon:
         if own:
             user_in_to = any(own in addr for addr in parsed.to_addresses)
             user_in_cc = any(own in addr for addr in parsed.cc_addresses)
-            user_only_cc = user_in_cc and not user_in_to
+            # BCC case: email arrived but user isn't in visible To: or CC: headers.
+            # Guard with `parsed.to_addresses` to avoid false positives when header
+            # parsing produced nothing (e.g. malformed message).
+            bcc_or_forwarded = bool(parsed.to_addresses) and not user_in_to and not user_in_cc
+            user_is_observer = (user_in_cc and not user_in_to) or bcc_or_forwarded
         else:
-            user_only_cc = False  # can't determine without own_email configured
-        if sender_is_teammate and user_only_cc:
-            return True, "CC'd on teammate's outbound thread"
-        if not sender_is_teammate and user_only_cc:
-            return True, "CC'd as observer — not primary addressee"
+            user_is_observer = False  # can't determine without own_email
+        if sender_is_teammate and user_is_observer:
+            return True, "CC'd/BCC'd on teammate's outbound thread"
+        if not sender_is_teammate and user_is_observer:
+            return True, "CC'd/BCC'd as observer — not primary addressee"
         return False, ""
 
     def _process_unread(
