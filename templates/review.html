@@ -24,9 +24,10 @@
 
 <div style="display:flex;flex-direction:column;gap:var(--sp-4);">
 {% for item in items %}
+{% set thread_msgs = item.get('thread_messages', []) %}
 <article class="review-card review-card--{{ item.priority }}" id="card-{{ item.id }}">
 
-  {# Header #}
+  {# ── Header ────────────────────────────────────────────────────────────── #}
   <div class="review-card-header">
     <div style="display:flex;align-items:center;gap:var(--sp-3);min-width:0;">
       {{ avatar(item.sender_name) }}
@@ -46,7 +47,84 @@
     </time>
   </div>
 
-  {# Editable reply body #}
+  {# ── Conversation controls ─────────────────────────────────────────────── #}
+  <div style="display:flex;align-items:center;justify-content:space-between;
+              padding:var(--sp-2) var(--sp-4);
+              border-top:1px solid var(--border-default);
+              background:var(--bg-elevated);">
+
+    <button type="button"
+      id="conv-btn-{{ item.id }}"
+      onclick="toggleConversation('{{ item.id }}')"
+      style="display:flex;align-items:center;gap:6px;
+             font-size:var(--text-sm);color:var(--text-secondary);
+             background:none;border:none;cursor:pointer;
+             font-family:var(--font);padding:0;line-height:1;">
+      {# Chevron — rotates to ▼ when expanded #}
+      <svg id="conv-chevron-{{ item.id }}"
+        width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5"
+        viewBox="0 0 24 24" style="flex-shrink:0;transition:transform 0.18s ease;"
+        aria-hidden="true">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/>
+      </svg>
+      <span>View conversation</span>
+      {% if thread_msgs %}
+        <span style="color:var(--text-disabled);">
+          · {{ thread_msgs|length }} message{{ 's' if thread_msgs|length != 1 else '' }}
+        </span>
+      {% endif %}
+    </button>
+
+    <a href="https://mail.google.com/mail/u/0/#all/{{ item.thread_id }}"
+      target="_blank" rel="noopener noreferrer"
+      style="display:flex;align-items:center;gap:4px;
+             font-size:var(--text-sm);color:var(--accent);
+             text-decoration:none;white-space:nowrap;"
+      title="Open this thread in Gmail">
+      Open in Gmail
+      <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5"
+        viewBox="0 0 24 24" aria-hidden="true">
+        <path stroke-linecap="round" stroke-linejoin="round"
+          d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6m0 0v6m0-6L10 14"/>
+      </svg>
+    </a>
+  </div>
+
+  {# ── Collapsible conversation panel ───────────────────────────────────── #}
+  <div id="conv-{{ item.id }}"
+    style="display:none;border-top:1px solid var(--border-default);
+           background:var(--bg-elevated);">
+    {% if thread_msgs %}
+      {% for msg in thread_msgs %}
+      <div style="padding:var(--sp-3) var(--sp-4);
+                  {% if not loop.last %}border-bottom:1px solid var(--border-default);{% endif %}">
+        <div style="display:flex;align-items:center;gap:var(--sp-2);margin-bottom:var(--sp-2);">
+          {{ avatar(msg.sender_name, 22) }}
+          <span style="font-size:var(--text-xs);font-weight:600;color:var(--text-secondary);">
+            {{ msg.sender_name }}
+          </span>
+          <span style="font-size:var(--text-xs);color:var(--text-disabled);">
+            &lt;{{ msg.sender_email }}&gt;
+          </span>
+          <span style="font-size:var(--text-xs);color:var(--text-disabled);margin-left:auto;">
+            {{ loop.index }} / {{ thread_msgs|length }}
+          </span>
+        </div>
+        <div style="font-size:var(--text-sm);color:var(--text-secondary);
+                    white-space:pre-wrap;line-height:1.65;
+                    max-height:180px;overflow-y:auto;
+                    padding-left:calc(22px + var(--sp-2));">{{ msg.body | e }}</div>
+      </div>
+      {% endfor %}
+    {% else %}
+      <div style="padding:var(--sp-4);font-size:var(--text-sm);
+                  color:var(--text-tertiary);text-align:center;">
+        Conversation history not available for this item.
+      </div>
+    {% endif %}
+  </div>
+
+  {# ── Editable reply body ───────────────────────────────────────────────── #}
   <div class="review-body">
     <div
       id="body-{{ item.id }}"
@@ -58,7 +136,7 @@
     >{{ item.body_html | safe }}</div>
   </div>
 
-  {# Actions #}
+  {# ── Actions ───────────────────────────────────────────────────────────── #}
   <div class="review-actions">
     <form method="POST" action="/review/{{ item.id }}/send"
       onsubmit="captureEditableBody(this, '{{ item.id }}')">
@@ -91,4 +169,16 @@
 {% endfor %}
 </div>
 
+{% endblock %}
+
+{% block scripts %}
+<script>
+function toggleConversation(id) {
+  const panel   = document.getElementById('conv-' + id);
+  const chevron = document.getElementById('conv-chevron-' + id);
+  const opening = panel.style.display === 'none';
+  panel.style.display      = opening ? 'block' : 'none';
+  chevron.style.transform  = opening ? 'rotate(90deg)' : '';
+}
+</script>
 {% endblock %}

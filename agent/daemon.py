@@ -267,6 +267,15 @@ class AgentDaemon:
                     "created_at": datetime.now().isoformat(),
                     "priority": priority,
                     "summary": summary,
+                    # Full thread history so the Review page can show the conversation
+                    "thread_messages": [
+                        {
+                            "sender_name": m.sender_name,
+                            "sender_email": m.sender_email,
+                            "body": m.body,
+                        }
+                        for m in parsed.thread_messages
+                    ],
                 })
 
                 # Mark processed immediately so it won't be re-queued next poll
