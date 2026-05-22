@@ -1,36 +1,54 @@
 import json
 import logging
-import time
 
 from google import genai
-from google.genai import types
-from google.genai.errors import ClientError, ServerError
 
+from ai.fallback_router import FallbackRouter
+from ai.providers.gemini_provider import GeminiProvider
+from ai.providers.openai_compatible_provider import OpenAICompatibleProvider
+from ai.providers.ollama_provider import OllamaProvider
 from ai.prompts import build_system_prompt
 from config import Settings
 from exceptions import GenerationError
 
 logger = logging.getLogger(__name__)
 
-_MAX_RETRIES = 3
-_INITIAL_BACKOFF = 2  # seconds
+
+def _build_providers(settings: Settings, system_prompt: str) -> list:
+    """Build the ordered provider list from settings. Gemini is always first."""
+    providers = [GeminiProvider(settings.gemini_api_key, settings.gemini_model, system_prompt)]
+
+    if settings.fallback_api_key:
+        providers.append(OpenAICompatibleProvider(
+            api_key=settings.fallback_api_key,
+            model=settings.fallback_model,
+            base_url=settings.fallback_base_url,
+            system_prompt=system_prompt,
+        ))
+
+    if settings.ollama_enabled:
+        providers.append(OllamaProvider(
+            model=settings.ollama_model,
+            base_url=settings.ollama_base_url,
+            system_prompt=system_prompt,
+        ))
+
+    return providers
 
 
 class ReplyGenerator:
     def __init__(self, settings: Settings) -> None:
-        self._client = genai.Client(api_key=settings.gemini_api_key)
-        self._model = settings.gemini_model
         auto_translate = getattr(settings, "auto_translate", False)
         context_facts = getattr(settings, "context_facts", "")
         self._system_prompt = build_system_prompt(settings.persona_prompt, auto_translate, context_facts)
+        self._router = FallbackRouter(_build_providers(settings, self._system_prompt))
+        # Keep _client and _model for attachment_reader compatibility
+        self._client = genai.Client(api_key=settings.gemini_api_key)
+        self._model = settings.gemini_model
 
     def generate(self, user_message: str) -> str:
-        """Generate an email body. Retries on rate limit."""
-        return self._call(
-            user_message,
-            system="You are an email assistant.",
-            use_persona=True,
-        )
+        """Generate an email body. Falls back to secondary providers on failure."""
+        return self._call(user_message, system="You are an email assistant.", use_persona=True)
 
     def classify(self, user_message: str) -> dict:
         """
@@ -48,7 +66,6 @@ class ReplyGenerator:
             priority = str(data.get("priority", "normal")).lower()
             if priority not in ("high", "normal", "low", "skip"):
                 priority = "normal"
-            # Default needs_reply to True so a parse failure never silently drops an email
             needs_reply = bool(data.get("needs_reply", True))
             return {
                 "priority": priority,
@@ -66,44 +83,49 @@ class ReplyGenerator:
         except Exception:
             return ""
 
+    def summarise_reply(self, reply_body: str) -> str:
+        """
+        One-sentence summary of the reply we sent — stored in interaction history.
+        Never raises; returns '' on failure.
+        """
+        try:
+            prompt = (
+                "Summarise this email reply in ONE sentence (max 15 words). "
+                "Describe what was communicated, not the style.\n\n"
+                f"Reply:\n{reply_body[:1000]}\n\n"
+                "Output the summary sentence ONLY. No trailing period."
+            )
+            return self._call(prompt, system="You are a concise email summariser.")
+        except Exception:
+            return ""
+
+    def extract_topics(self, email_body: str, reply_body: str) -> list[str]:
+        """
+        Extract 3–5 topic tags from the email + reply pair.
+        Stored in interaction history for context injection on future emails.
+        Never raises; returns [] on failure.
+        """
+        try:
+            prompt = (
+                "Extract 3 to 5 short topic tags from this email exchange. "
+                "Tags should be 1–3 words, lowercase, hyphenated.\n\n"
+                f"Their email:\n{email_body[:400]}\n\n"
+                f"Our reply:\n{reply_body[:400]}\n\n"
+                "Return a JSON array of strings only, e.g. [\"contract-renewal\", \"pricing\"]"
+            )
+            text = self._call(prompt, system="You are a topic extraction assistant. Return JSON only.")
+            if "```" in text:
+                text = text.split("```")[1]
+                if text.startswith("json"):
+                    text = text[4:]
+            tags = json.loads(text.strip())
+            if isinstance(tags, list):
+                return [str(t).strip().lower() for t in tags if t][:5]
+        except Exception:
+            pass
+        return []
+
     # ── Internal ───────────────────────────────────────────────────────────────
 
     def _call(self, user_message: str, system: str, use_persona: bool = False) -> str:
-        instruction = self._system_prompt if use_persona else system
-        config = types.GenerateContentConfig(system_instruction=instruction)
-
-        for attempt in range(_MAX_RETRIES + 1):
-            try:
-                response = self._client.models.generate_content(
-                    model=self._model,
-                    contents=user_message,
-                    config=config,
-                )
-                text = response.text
-                if not text:
-                    raise GenerationError("Gemini returned an empty response.")
-                return text.strip()
-
-            except ClientError as exc:
-                code = exc.code if hasattr(exc, "code") else 0
-                status = getattr(exc, "status", "")
-
-                if code == 429 or "RESOURCE_EXHAUSTED" in str(status):
-                    if attempt < _MAX_RETRIES:
-                        wait = _INITIAL_BACKOFF * (2 ** attempt)
-                        logger.warning("Gemini rate limit. Retrying in %ds...", wait)
-                        time.sleep(wait)
-                        continue
-                    raise GenerationError("Gemini rate limit exceeded after retries.") from exc
-
-                if code == 401 or "UNAUTHENTICATED" in str(status):
-                    raise GenerationError(
-                        "Invalid Gemini API key. Check GEMINI_API_KEY in your .env file."
-                    ) from exc
-
-                raise GenerationError(f"Gemini client error ({code}): {exc}") from exc
-
-            except ServerError as exc:
-                raise GenerationError(f"Gemini server error (5xx): {exc}") from exc
-
-        raise GenerationError("Gemini generation failed after all retries.")
+        return self._router.generate(user_message, system, use_persona)

@@ -34,6 +34,12 @@ def settings():
             "context_facts": request.form.get("context_facts", "").strip(),
             "own_email": existing.get("own_email", ""),   # auto-detected, not submitted by form
             "team_domain": request.form.get("team_domain", "").strip().lower().lstrip("@"),
+            "fallback_api_key": request.form.get("fallback_api_key", "").strip(),
+            "fallback_model": request.form.get("fallback_model", "llama-3.3-70b-versatile").strip(),
+            "fallback_base_url": request.form.get("fallback_base_url", "https://api.groq.com/openai/v1").strip(),
+            "ollama_enabled": request.form.get("ollama_enabled") == "true",
+            "ollama_model": request.form.get("ollama_model", "llama3.2").strip(),
+            "ollama_base_url": request.form.get("ollama_base_url", "http://localhost:11434").strip(),
         }
 
         if not updated["gemini_api_key"]:

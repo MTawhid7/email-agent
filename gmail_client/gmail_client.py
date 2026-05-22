@@ -115,6 +115,73 @@ class GmailClient:
         )
         return profile.get("emailAddress", "")
 
+    def get_current_history_id(self) -> str:
+        """Return the current Gmail historyId for this account."""
+        profile = self._execute(
+            self._service.users().getProfile(userId="me")
+        )
+        return str(profile.get("historyId", ""))
+
+    def history_list(self, start_history_id: str) -> tuple[list[str], str]:
+        """
+        Return (deduplicated_thread_ids, latest_history_id) for all messages
+        added to INBOX since start_history_id.
+
+        Raises HistoryExpiredError if start_history_id is older than ~30 days.
+        Raises GmailAPIError on other errors.
+        """
+        from exceptions import HistoryExpiredError
+        from googleapiclient.errors import HttpError
+
+        thread_ids: list[str] = []
+        latest_id = start_history_id
+        page_token = None
+
+        while True:
+            kwargs = dict(
+                userId="me",
+                startHistoryId=start_history_id,
+                historyTypes=["messageAdded"],
+                labelId="INBOX",
+                maxResults=500,
+            )
+            if page_token:
+                kwargs["pageToken"] = page_token
+
+            try:
+                response = self._execute(
+                    self._service.users().history().list(**kwargs)
+                )
+            except HttpError as exc:
+                if exc.resp.status == 404:
+                    raise HistoryExpiredError(
+                        f"historyId {start_history_id} is older than 30 days — "
+                        "full inbox scan required."
+                    ) from exc
+                raise
+
+            latest_id = str(response.get("historyId", latest_id))
+
+            for record in response.get("history", []):
+                for added in record.get("messagesAdded", []):
+                    msg = added.get("message", {})
+                    if "INBOX" in msg.get("labelIds", []):
+                        thread_ids.append(msg["threadId"])
+
+            page_token = response.get("nextPageToken")
+            if not page_token:
+                break
+
+        # Deduplicate while preserving order (same thread may appear multiple times)
+        seen: set[str] = set()
+        unique: list[str] = []
+        for tid in thread_ids:
+            if tid not in seen:
+                seen.add(tid)
+                unique.append(tid)
+
+        return unique, latest_id
+
     def get_attachment(self, message_id: str, attachment_id: str) -> bytes:
         """Download an attachment and return its bytes."""
         import base64 as b64

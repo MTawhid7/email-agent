@@ -50,7 +50,16 @@ def build_user_message(
     intent: str = "",
     template_body: str = "",
     attachment_summary: str = "",
+    recent_interactions: Optional[list] = None,
+    recurring_topics: Optional[list] = None,
 ) -> str:
+    """
+    Build the user-turn prompt for a reply or bulk email.
+
+    recent_interactions: list of InteractionRecord objects (newest first).
+    recurring_topics:    list of topic tag strings.
+    Both default to None — all existing callers are unchanged.
+    """
     notes = _merge_notes(contact)
     tone_line = ""
     if contact and getattr(contact, "tone", ""):
@@ -63,9 +72,13 @@ def build_user_message(
             extras += f"\nAttachment context: {attachment_summary}"
         if template_body:
             extras += f"\nTemplate guide (personalise freely): {template_body}"
+
+        history_block = _format_interaction_history(recent_interactions, recurring_topics)
+
         return (
             f"Sender: {parsed.sender_name} <{parsed.sender_email}>\n"
-            f"Contact notes: {notes or 'none'}{tone_line}\n\n"
+            f"Contact notes: {notes or 'none'}{tone_line}\n"
+            f"{history_block}"
             f"Thread history (oldest first):\n{thread_block}\n"
             f"{extras}\n"
             f"Task: Write a reply to {parsed.sender_first_name}. "
@@ -151,3 +164,45 @@ def _format_thread(messages) -> str:
         body = msg.body.strip().replace("\n", "\n  ")
         lines.append(f"{header}\n  {body}")
     return "\n\n".join(lines)
+
+
+def _format_interaction_history(
+    interactions: Optional[list],
+    topics: Optional[list],
+    char_budget: int = 2000,
+) -> str:
+    """
+    Format pre-computed interaction history for injection into the reply prompt.
+    Returns an empty string when no history is available.
+    Oldest records are dropped first if the total exceeds char_budget.
+    """
+    lines: list[str] = []
+    budget = char_budget
+
+    if topics:
+        topics_line = f"Recurring topics with this contact: {', '.join(topics[:10])}\n"
+        lines.append(topics_line)
+        budget -= len(topics_line)
+
+    if interactions:
+        history_lines: list[str] = []
+        for rec in interactions:  # already newest-first
+            entry = (
+                f"- [{rec.date}] {rec.subject}\n"
+                f"  They said: {rec.summary}\n"
+                f"  You replied: {rec.our_reply_summary}"
+            )
+            if len(entry) > budget:
+                break
+            history_lines.append(entry)
+            budget -= len(entry)
+        if history_lines:
+            lines.append(
+                "Recent interactions with this contact (newest first):\n"
+                + "\n".join(history_lines)
+                + "\n"
+            )
+
+    if not lines:
+        return ""
+    return "\n" + "\n".join(lines) + "\n"

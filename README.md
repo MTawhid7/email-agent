@@ -33,6 +33,11 @@ The app packages as a native desktop application (`.app` on macOS, `.exe` on Win
 | **Bulk Send** | Generate personalised drafts for multiple recipients — enter manually, upload a CSV, or pick from saved contacts |
 | **Contact Management** | Per-contact notes and tone preferences; mark contacts as Teammates; add individually, import from CSV, or select in bulk send |
 | **Teammate-Aware Skipping** | Automatically skips emails where you are only CC'd — distinguishes observer threads from emails that need a reply |
+| **Multi-Provider LLM Failover** | Gemini is primary; Groq / xAI Grok / OpenAI / Ollama used as fallback on rate limits or outages |
+| **Conversation Memory** | Per-contact interaction history — recent replies and recurring topics injected into every generation prompt |
+| **Real-Time Inbox** | IMAP IDLE push notifications replace polling; replies are generated within seconds of email arrival |
+| **Reliable Catch-up** | Gmail historyId cursor persists across restarts — no emails missed even after hours offline |
+| **Proactive Token Refresh** | OAuth token refreshed 5 minutes before expiry in the background; IMAP session reconnects automatically |
 | **Social Link Icons** | Brand icons (LinkedIn, GitHub, WhatsApp, etc.) in email signature via jsDelivr CDN |
 | **Knowledge Base** | Free-form facts injected into every AI prompt — prevents hallucinated phone numbers / contact details |
 | **Review Status Tracking** | Activity log reflects pending → sent / discarded state after user action |
@@ -208,6 +213,10 @@ All settings are managed through the web UI (Settings page) and stored in:
 | Auto-translate | Detect incoming language and reply in the same language |
 | Your Email Address | Your Gmail address — used to detect whether you are To: or only CC: on an email |
 | Team Domain | e.g. `yourcompany.com` — all senders from this domain are treated as teammates |
+| Fallback API Key | API key for a secondary LLM provider (Groq, xAI Grok, OpenAI, Mistral — any OpenAI-compatible API) |
+| Fallback Model | Model name for the fallback provider (default: `llama-3.3-70b-versatile` for Groq) |
+| Fallback Base URL | API endpoint — change this URL to switch provider without code changes |
+| Ollama | Optional local model fallback — free, no API key, requires Ollama installed |
 | Signature | Name, title, company, phone, social links with brand icons |
 
 ---

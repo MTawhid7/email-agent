@@ -24,6 +24,14 @@ class Settings:
     context_facts: str = ""    # factual grounding — injected into AI system prompt
     own_email: str = ""        # agent user's Gmail address — used to detect To: vs CC:
     team_domain: str = ""      # e.g. "technyx.com" — senders from this domain are teammates
+    # LLM fallback provider (any OpenAI-compatible API: Groq, xAI Grok, OpenAI, Mistral…)
+    fallback_api_key: str = ""
+    fallback_model: str = "llama-3.3-70b-versatile"
+    fallback_base_url: str = "https://api.groq.com/openai/v1"
+    # Ollama — local model, no API key needed
+    ollama_enabled: bool = False
+    ollama_model: str = "llama3.2"
+    ollama_base_url: str = "http://localhost:11434"
 
 
 def _require(key: str) -> str:
@@ -101,6 +109,12 @@ def load_settings_from_dict(data: dict) -> Settings:
         context_facts=optional("context_facts"),
         own_email=optional("own_email"),
         team_domain=optional("team_domain"),
+        fallback_api_key=optional("fallback_api_key"),
+        fallback_model=optional("fallback_model", "llama-3.3-70b-versatile"),
+        fallback_base_url=optional("fallback_base_url", "https://api.groq.com/openai/v1"),
+        ollama_enabled=str(data.get("ollama_enabled", "false")).lower() in ("true", "1", "yes"),
+        ollama_model=optional("ollama_model", "llama3.2"),
+        ollama_base_url=optional("ollama_base_url", "http://localhost:11434"),
     )
 
 

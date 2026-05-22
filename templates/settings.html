@@ -77,6 +77,46 @@
     </div>
   </div>
 
+  {# ── AI Fallback Providers ────────────────────────────────────────────── #}
+  <div class="card card-lg">
+    <div class="card-section-title">AI Fallback Providers</div>
+    <p class="hint" style="margin-bottom:var(--sp-4);">
+      If Gemini is rate-limited or unavailable, the agent automatically tries these providers in order.
+      <strong>Groq is recommended</strong> — free tier (14,400 req/day), no credit card required, extremely fast.
+    </p>
+
+    <div style="display:flex;flex-direction:column;gap:var(--sp-4);">
+      {{ input_field('fallback_api_key', 'Fallback API Key', type='password',
+          value=config.get('fallback_api_key',''),
+          placeholder='gsk_… or sk-…',
+          hint='Works with Groq, xAI Grok, OpenAI, Mistral, and any OpenAI-compatible API. Leave blank to disable.') }}
+
+      <div class="grid-2">
+        {{ input_field('fallback_model', 'Model',
+            value=config.get('fallback_model','llama-3.3-70b-versatile'),
+            placeholder='llama-3.3-70b-versatile',
+            hint='Model name for the provider above.') }}
+        {{ input_field('fallback_base_url', 'API Base URL',
+            value=config.get('fallback_base_url','https://api.groq.com/openai/v1'),
+            placeholder='https://api.groq.com/openai/v1',
+            hint='Change to switch provider — Groq, Grok, OpenAI, and Mistral all use the same format.') }}
+      </div>
+
+      {{ toggle_field('ollama_enabled', 'Enable Ollama (local model)',
+          'Use a locally running Ollama model as the last fallback. Free, no API key required. Start Ollama with `ollama serve`.',
+          checked=config.get('ollama_enabled', False)) }}
+
+      <div class="grid-2">
+        {{ input_field('ollama_model', 'Ollama Model',
+            value=config.get('ollama_model','llama3.2'),
+            placeholder='llama3.2') }}
+        {{ input_field('ollama_base_url', 'Ollama URL',
+            value=config.get('ollama_base_url','http://localhost:11434'),
+            placeholder='http://localhost:11434') }}
+      </div>
+    </div>
+  </div>
+
   {# ── Smart Filtering ──────────────────────────────────────────────────── #}
   <div class="card card-lg">
     <div class="card-section-title">Smart Filtering</div>

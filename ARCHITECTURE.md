@@ -2,6 +2,10 @@
 
 > A deep-dive into the system design, implementation mechanics, known limitations, and future roadmap.
 
+> **Latest additions (production systems):** Multi-provider LLM failover, per-contact interaction memory,
+> IMAP IDLE real-time pipeline, historyId-based catch-up, and proactive token lifecycle management.
+> See §6–10 for details.
+
 ---
 
 ## Table of Contents
@@ -920,4 +924,132 @@ User edits settings → POST /settings
                                        → picks up new persona, poll interval, etc.
   └─ flash("Settings saved")
   └─ redirect /settings
+```
+
+---
+
+## Production Systems (added for high-volume team use)
+
+### System 1 — Multi-Provider LLM Failover
+
+**Problem:** Gemini 429/503 under load silently drops emails.
+
+**Architecture:** Provider abstraction layer in `ai/providers/` with a `FallbackRouter` that tries providers in order and moves to the next on any soft failure (`ProviderUnavailableError`).
+
+```
+FallbackRouter.generate()
+    ├── GeminiProvider          (primary — existing Gemini logic, extracted)
+    ├── OpenAICompatibleProvider (any OpenAI-compatible API)
+    │     Groq:   api.groq.com/openai/v1  ← recommended free option
+    │     Grok:   api.x.ai/v1
+    │     OpenAI: api.openai.com/v1
+    │     Mistral: api.mistral.ai/v1
+    └── OllamaProvider          (local model, no API key, free)
+```
+
+Soft failures (→ next provider): 429, 503, 5xx, network timeout
+Hard failures (→ propagate immediately): 401 invalid key, content policy
+
+Uses `httpx` directly — no `openai` SDK dependency. Configured in **Settings → AI Fallback Providers**.
+
+---
+
+### System 2 — Per-Contact Interaction History
+
+**Problem:** Every email generated in isolation — recurring contacts get no continuity.
+
+**Storage:** `{DATA_DIR}/history/interactions.json` — dict keyed by sender email, value is a list of up to 10 `InteractionRecord` objects (newest-first):
+
+```json
+{
+  "alice@example.com": [
+    {
+      "thread_id": "18abc123",
+      "date": "2026-05-22",
+      "subject": "Re: Q3 proposal",
+      "summary": "Alice asking about pricing and timeline",
+      "our_reply_summary": "Sent revised estimate and confirmed Q3 delivery",
+      "topics": ["pricing", "q3-proposal", "delivery-timeline"]
+    }
+  ]
+}
+```
+
+**Recording trigger:** When the user clicks **Send Now** or **Save as Draft** in the Review Queue, `AgentDaemon.resolve_review_item(item_id, "sent")` looks up `_pending_history[item_id]` (set at reply-generation time) and writes to `InteractionStore`.
+
+**Data computed at generation time** (not retrieval time): `summarise_reply()` and `extract_topics()` are called once when the reply is generated and stored in `_pending_history`. No extra LLM calls at retrieval time.
+
+---
+
+### System 3 — Context-Aware Reply Generation
+
+**Token budget per email generation:**
+```
+Current thread (complete):          ~2,000 tokens
+Contact notes (static):             ~100 tokens
+Recurring topic tags:               ~30 tokens
+Last 5 interaction summaries:       ~500 tokens
+Global knowledge base:              ~200 tokens
+System prompt (persona):            ~300 tokens
+                                    ──────────────
+Total:                              ~3,130 tokens  ← trivial for any model
+```
+
+**Context injection point:** `build_user_message()` in `ai/prompts.py` accepts `recent_interactions` and `recurring_topics` as optional parameters. All existing callers (bulk sender, CLI) are unchanged — both parameters default to `None`.
+
+**No runtime summarisation:** Interaction summaries are pre-computed at send time. `get_recent()` retrieves compact strings — no LLM call in the hot path.
+
+---
+
+### System 4 — IMAP IDLE + historyId Hybrid Pipeline
+
+**Problem:** 5-minute poll interval; missed emails when offline.
+
+**Architecture:** Two components replace the single polling `time.sleep()` loop:
+
+**`gmail_client/imap_watcher.py` — ImapIdleWatcher:**
+- Persistent TLS connection to `imap.gmail.com:993`
+- XOAUTH2 authentication using the OAuth2 access token
+- `IDLE` command — server sends `* N EXISTS` when new mail arrives
+- Fires `wake_event` immediately on notification
+- Re-IDLE every 28 minutes (Gmail's 29-minute IDLE limit)
+- On token refresh: reconnects with fresh XOAUTH2
+- On any failure: exponential back-off reconnect (1s → 60s)
+- Graceful degradation: if IMAP unavailable, fires `wake_event` every 60s (fast polling fallback)
+
+**`_process_unread_incremental()` in daemon:**
+- Waits on `wake_event` with 60s timeout (IMAP notification or heartbeat)
+- Calls `gmail.history_list(last_history_id)` → returns only threads added since last run
+- Persists new `last_history_id` to `config.json` after each successful batch
+- On 404 (`HistoryExpiredError`): falls back to `list_unread_thread_ids()`, resets cursor
+
+**historyId guarantee:** Gmail retains history for 30 days. If the app is offline for less than 30 days, every email is recovered on restart. The cursor is stored in `config.json` under key `last_history_id`.
+
+---
+
+### System 5 — Proactive Token Lifecycle Management
+
+**Problem:** OAuth access tokens expire every ~60 minutes. Synchronous refresh only triggered on failure; blocks operations; can crash the IMAP session.
+
+**`gmail_client/token_manager.py` — TokenManager:**
+- Holds credentials in a `threading.RLock`-protected variable
+- Background thread checks expiry every 30 seconds
+- Refreshes proactively 5 minutes before expiry
+- On refresh: saves to `token.json`, notifies registered callbacks
+- `ImapIdleWatcher` registers a callback: on token refresh → reconnect IMAP with fresh XOAUTH2
+- On refresh failure: logs warning, retries in 60s — **never crashes the daemon**
+- On `invalid_grant` (refresh token revoked): raises `TokenRefreshError` → daemon surfaces "Re-connect Gmail" button
+
+**Token flow:**
+```
+TokenManager._refresh_loop() (every 30s check)
+    │ expiry ≤ 5 min away
+    ▼
+creds.refresh(Request()) → save token.json
+    │ notify_callbacks
+    ▼
+ImapIdleWatcher.on_token_refreshed()
+    │ sets reconnect_flag
+    ▼
+idle_loop() checks flag → logout → reconnect with fresh XOAUTH2 → re-IDLE
 ```

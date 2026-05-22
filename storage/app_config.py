@@ -133,6 +133,10 @@ def get_templates_path() -> str:
     return str(_data_dir() / "templates.json")
 
 
+def get_history_path() -> str:
+    return str(_data_dir() / "history" / "interactions.json")
+
+
 def load_templates() -> list[dict]:
     p = Path(get_templates_path())
     if not p.exists():

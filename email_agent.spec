@@ -51,6 +51,11 @@ a = Analysis(
         "bs4",
         "dotenv",
         "requests",
+        "httpx",
+        # IMAP IDLE watcher
+        "imapclient",
+        "imapclient.imapclient",
+        "imapclient.util",
     ],
     hookspath=[],
     hooksconfig={},

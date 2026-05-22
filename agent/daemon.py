@@ -16,7 +16,6 @@ from contacts.contact_store import ContactStore
 from email_parser.attachment_reader import fetch_and_summarise
 from email_parser.parser import parse_thread
 from exceptions import AuthError, EmailAgentError
-from gmail_client.auth import get_credentials
 from gmail_client.gmail_client import GmailClient
 from signature.signature import SignatureBuilder
 from storage.app_config import (
@@ -83,6 +82,11 @@ class AgentDaemon:
         self._draft_count_date: date = date.today()
         self._error: Optional[str] = None
         self._detected_email: str = ""   # auto-fetched from Gmail API on first run
+        # Interaction history (System 2/3)
+        self._interaction_store = None   # set in _build_components
+        self._pending_history: dict[str, dict] = {}  # keyed by item_id
+        # Token lifecycle (System 5)
+        self._token_manager = None       # set in _build_components
 
     # ── Public API ─────────────────────────────────────────────────────────────
 
@@ -99,6 +103,13 @@ class AgentDaemon:
 
     def stop(self) -> None:
         self._stop_event.set()
+        # Unblock the waiting _run_loop immediately
+        if hasattr(self, "_wake_event"):
+            self._wake_event.set()
+        if self._imap_watcher:
+            self._imap_watcher.stop()
+        if self._token_manager:
+            self._token_manager.stop()
         self._append_log("info", "Agent stopped.")
 
     def wait_for_stop(self, timeout: float = 3.0) -> None:
@@ -130,7 +141,15 @@ class AgentDaemon:
 
     # ── Internal loop ──────────────────────────────────────────────────────────
 
+    # wake_event and imap_watcher are initialised here so stop() can access them
+    # even before _run_loop() starts (e.g. if start() is called then stop() quickly).
+    _wake_event: threading.Event
+    _imap_watcher = None
+
     def _run_loop(self) -> None:
+        # Initialise the wake event for this run (cleared state)
+        self._wake_event = threading.Event()
+
         try:
             settings, gmail, generator, contact_store, signature_html = self._build_components()
         except AuthError as exc:
@@ -140,10 +159,31 @@ class AgentDaemon:
             self._set_error(f"Startup failed: {exc}")
             return
 
+        # Start IMAP IDLE watcher — it fires _wake_event when new mail arrives
+        from gmail_client.imap_watcher import ImapIdleWatcher
+        own_email = settings.own_email or self._detected_email or ""
+        self._imap_watcher = ImapIdleWatcher(
+            token_manager=self._token_manager,
+            wake_event=self._wake_event,
+            own_email=own_email,
+        )
+        self._imap_watcher.start()
+
+        # Run one immediate check on startup (catches emails that arrived while offline)
+        self._wake_event.set()
+
         while not self._stop_event.is_set():
-            sleep_seconds = settings.poll_interval_seconds
+            # Wait for IMAP signal or 60-second fallback heartbeat
+            self._wake_event.wait(timeout=60)
+            self._wake_event.clear()
+
+            if self._stop_event.is_set():
+                break
+
             try:
-                count = self._process_unread(gmail, generator, contact_store, signature_html, settings)
+                count = self._process_unread_incremental(
+                    gmail, generator, contact_store, signature_html, settings
+                )
                 if not count:
                     self._append_log("info", "No new emails.")
                 else:
@@ -153,24 +193,20 @@ class AgentDaemon:
                 return
             except EmailAgentError as exc:
                 self._append_log("error", f"Agent error: {exc}")
-                sleep_seconds = 30  # retry quickly after a recoverable error
             except Exception as exc:
                 self._append_log("error", f"Unexpected error: {exc}")
-                sleep_seconds = 30
-
-            for _ in range(sleep_seconds * 2):
-                if self._stop_event.is_set():
-                    break
-                time.sleep(0.5)
 
     def _build_components(self):
+        from gmail_client.token_manager import TokenManager
         raw = load_config()
         settings = load_settings_from_dict(raw)
-        creds = get_credentials(
+        # TokenManager loads credentials immediately, then starts background refresh
+        self._token_manager = TokenManager(
             credentials_path=get_credentials_path(),
             token_path=get_token_path(),
-            allow_oauth_flow=False,   # never block the daemon thread waiting for a browser
         )
+        self._token_manager.start()
+        creds = self._token_manager.get_credentials()
         gmail = GmailClient(creds)
         generator = ReplyGenerator(settings)
         contact_store = ContactStore(path=get_contacts_path())
@@ -188,6 +224,11 @@ class AgentDaemon:
                 pass
         else:
             self._detected_email = settings.own_email
+
+        # Interaction history store (System 2/3)
+        from history.interaction_store import InteractionStore
+        from storage.app_config import get_history_path
+        self._interaction_store = InteractionStore(path=get_history_path())
 
         return settings, gmail, generator, contact_store, signature_html
 
@@ -262,6 +303,45 @@ class AgentDaemon:
 
         return False, ""
 
+    def _process_unread_incremental(
+        self,
+        gmail: GmailClient,
+        generator: ReplyGenerator,
+        contact_store: ContactStore,
+        signature_html: str,
+        settings,
+    ) -> int:
+        """
+        Fetch only threads added since the last run using Gmail's History API.
+        Falls back to the full unread scan if the historyId is too old or missing.
+        Persists the new historyId to config.json after each successful batch.
+        """
+        from exceptions import HistoryExpiredError
+        from storage.app_config import merge_and_save_config
+
+        raw = load_config()
+        last_id = raw.get("last_history_id", "")
+
+        if last_id:
+            try:
+                thread_ids, new_id = gmail.history_list(last_id)
+                merge_and_save_config({"last_history_id": new_id})
+            except HistoryExpiredError:
+                self._append_log("info", "History cursor expired — running full inbox scan.")
+                thread_ids = gmail.list_unread_thread_ids(max_results=20)
+                new_id = gmail.get_current_history_id()
+                if new_id:
+                    merge_and_save_config({"last_history_id": new_id})
+        else:
+            thread_ids = gmail.list_unread_thread_ids(max_results=20)
+            new_id = gmail.get_current_history_id()
+            if new_id:
+                merge_and_save_config({"last_history_id": new_id})
+
+        return self._process_thread_ids(
+            thread_ids, gmail, generator, contact_store, signature_html, settings
+        )
+
     def _process_unread(
         self,
         gmail: GmailClient,
@@ -270,7 +350,21 @@ class AgentDaemon:
         signature_html: str,
         settings,
     ) -> int:
+        """Legacy full-scan method — kept for reference; _process_unread_incremental is used instead."""
         thread_ids = gmail.list_unread_thread_ids(max_results=20)
+        return self._process_thread_ids(
+            thread_ids, gmail, generator, contact_store, signature_html, settings
+        )
+
+    def _process_thread_ids(
+        self,
+        thread_ids: list,
+        gmail: GmailClient,
+        generator: ReplyGenerator,
+        contact_store: ContactStore,
+        signature_html: str,
+        settings,
+    ) -> int:
         count = 0
 
         for thread_id in thread_ids:
@@ -343,10 +437,19 @@ class AgentDaemon:
                         model=generator._model,
                     )
 
+                # ── Retrieve interaction history for context (System 3) ────────
+                recent_interactions = []
+                recurring_topics = []
+                if self._interaction_store:
+                    recent_interactions = self._interaction_store.get_recent(parsed.sender_email, n=5)
+                    recurring_topics = self._interaction_store.get_topics(parsed.sender_email)
+
                 # ── Generate reply ─────────────────────────────────────────────
                 user_message = build_user_message(
                     parsed, contact, mode="reply",
                     attachment_summary=attachment_summary,
+                    recent_interactions=recent_interactions or None,
+                    recurring_topics=recurring_topics or None,
                 )
                 body = generator.generate(user_message)
                 final_html = assemble(parsed.sender_first_name, body, signature_html)
@@ -356,8 +459,21 @@ class AgentDaemon:
                     else f"Re: {parsed.subject}"
                 )
 
-                # ── Feature 1: Push to review queue ────────────────────────────
+                # ── Store history metadata for recording when user sends (System 2)
                 item_id = str(uuid.uuid4())   # defined here so _append_log can reference it
+                our_reply_summary = generator.summarise_reply(body)
+                topics = generator.extract_topics(parsed.latest_body, body)
+                self._pending_history[item_id] = {
+                    "sender_email": parsed.sender_email,
+                    "thread_id": parsed.thread_id,
+                    "date": datetime.now().date().isoformat(),
+                    "subject": parsed.subject,
+                    "summary": summary,
+                    "our_reply_summary": our_reply_summary,
+                    "topics": topics,
+                }
+
+                # ── Feature 1: Push to review queue ────────────────────────────
                 review_queue.push({
                     "id": item_id,
                     "sender_name": parsed.sender_name,
@@ -413,6 +529,25 @@ class AgentDaemon:
                 entry["level"] = level
                 entry["resolved"] = action
                 break
+
+        # Record interaction history when the user sends a reply (System 2)
+        hist = self._pending_history.pop(item_id, None)
+        if hist and action == "sent" and self._interaction_store:
+            try:
+                from history.interaction_store import InteractionRecord
+                self._interaction_store.record(
+                    hist["sender_email"],
+                    InteractionRecord(
+                        thread_id=hist["thread_id"],
+                        date=hist["date"],
+                        subject=hist["subject"],
+                        summary=hist["summary"],
+                        our_reply_summary=hist["our_reply_summary"],
+                        topics=hist["topics"],
+                    ),
+                )
+            except Exception as exc:
+                logger.warning("Failed to record interaction history: %s", exc)
 
     def _append_log(self, level: str, message: str, summary: str = "",
                     priority: str = "", item_id: str = "") -> None:
