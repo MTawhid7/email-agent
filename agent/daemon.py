@@ -1,4 +1,5 @@
 import logging
+import re
 import threading
 import time
 import uuid
@@ -29,6 +30,45 @@ logger = logging.getLogger(__name__)
 
 _MAX_LOG_ENTRIES = 100
 _PRIORITY_EMOJI = {"high": "🔴", "normal": "🟡", "low": "⚪", "skip": "⏭"}
+
+# ── Greeting name detection ────────────────────────────────────────────────────
+# Matches the opening of a common greeting and captures the text that follows,
+# stopping at the first sentence-ending punctuation or newline.
+_GREETING_RE = re.compile(
+    r"\b(?:hi|hello|dear|hey|greetings?|good\s+(?:morning|afternoon|evening))"
+    r"\s*[,!]?\s+(.{1,100}?)(?:[.!,\n]|$)",
+    re.IGNORECASE,
+)
+# Capitalized words that look like names but are generic group/role words
+_GENERIC_GREETING_WORDS = frozenset({
+    "there", "all", "everyone", "team", "folks", "guys", "colleagues",
+    "friends", "sir", "madam", "valued", "client", "clients", "customer",
+    "customers", "community", "partner", "partners", "and", "the",
+})
+
+
+def _extract_greeting_names(body: str) -> frozenset[str]:
+    """
+    Extract all personal names from the opening greeting of an email body.
+    Looks only at the first 250 characters (greetings are always at the top).
+
+    "Hi John"              → {"john"}
+    "Hi John and Tawhid"   → {"john", "tawhid"}
+    "Dear Mr. Smith,"      → {"smith"}
+    "Hi team"              → set()   ← generic word, not a personal name
+    "Hello there"          → set()
+    No greeting            → set()
+    """
+    m = _GREETING_RE.search(body[:250])
+    if not m:
+        return frozenset()
+    # Find all capitalised words in the matched greeting fragment
+    names = {
+        word.lower()
+        for word in re.findall(r"\b([A-Z][a-zA-Z'\-]{1,25})\b", m.group(1))
+        if word.lower() not in _GENERIC_GREETING_WORDS
+    }
+    return frozenset(names)
 
 
 class AgentDaemon:
@@ -151,11 +191,42 @@ class AgentDaemon:
 
         return settings, gmail, generator, contact_store, signature_html
 
-    def _should_skip_as_observer(self, parsed, contact, settings) -> tuple[bool, str]:
+    def _user_name_variants(self, settings) -> frozenset[str]:
+        """
+        Return the lowercase name tokens the user is known by.
+        Built from settings.signature_name and the prefix of own_email.
+        "Tawhid Islam", "tawhid@company.com" → {"tawhid", "islam"}
+        "Md. Tawhidul Islam", "t.islam@co.com" → {"md", "tawhidul", "islam", "t"}
+        """
+        variants: set[str] = set()
+        if settings.signature_name:
+            for token in re.split(r"[\s.\-_]+", settings.signature_name):
+                clean = re.sub(r"[^a-z]", "", token.lower())
+                if len(clean) >= 2:
+                    variants.add(clean)
+        email = settings.own_email or self._detected_email or ""
+        if "@" in email:
+            prefix = email.split("@")[0].lower()
+            for part in re.split(r"[.\-_]+", prefix):
+                if len(part) >= 2:
+                    variants.add(part)
+        return frozenset(variants)
+
+    def _should_skip_as_observer(
+        self,
+        parsed,
+        contact,
+        settings,
+        greeting_names: frozenset = frozenset(),
+        user_name_variants: frozenset = frozenset(),
+    ) -> tuple[bool, str]:
         """
         Returns (True, reason) when the agent user should not reply because they are
         an observer (only CC'd) or because a teammate is keeping them informed.
         Runs before any Gemini API call to avoid wasting tokens.
+
+        greeting_names:      names extracted from the opening greeting line
+        user_name_variants:  lowercase name tokens the user is known by
         """
         own = (settings.own_email or self._detected_email or "").lower().strip()
         team_domain = (settings.team_domain or "").lower().strip()
@@ -178,6 +249,17 @@ class AgentDaemon:
             return True, "CC'd/BCC'd on teammate's outbound thread"
         if not sender_is_teammate and user_is_observer:
             return True, "CC'd/BCC'd as observer — not primary addressee"
+
+        # Greeting name check — only hard-skip when the user is already an observer
+        # by headers AND the greeting confirms someone else is addressed.
+        # When user IS in To:, greeting mismatch is only a soft signal (passed to
+        # Gemini via greeting_note rather than causing a hard pre-filter skip here).
+        if greeting_names and user_name_variants:
+            if not greeting_names.intersection(user_name_variants):
+                if user_is_observer:
+                    greeted = " / ".join(sorted(greeting_names)[:2])
+                    return True, f"Greeting to '{greeted}' — not addressed to you"
+
         return False, ""
 
     def _process_unread(
@@ -200,8 +282,14 @@ class AgentDaemon:
 
                 contact = contact_store.lookup(parsed.sender_email)
 
+                # Pre-compute greeting context once — reused by skip check AND classifier
+                greeting_names = _extract_greeting_names(parsed.latest_body)
+                user_name_variants = self._user_name_variants(settings)
+
                 # ── Teammate / observer skip (before any Gemini call) ──────────
-                should_skip, skip_reason = self._should_skip_as_observer(parsed, contact, settings)
+                should_skip, skip_reason = self._should_skip_as_observer(
+                    parsed, contact, settings, greeting_names, user_name_variants
+                )
                 if should_skip:
                     gmail.mark_as_processed(parsed.latest_message_id)
                     self._append_log("info", f"⏭ Skipped ({skip_reason}): {parsed.sender_name}", priority="skip")
@@ -212,8 +300,23 @@ class AgentDaemon:
 
                 # ── Feature 2: Classify + newsletter / no-reply detection ─────
                 own_email = settings.own_email or self._detected_email or ""
+
+                # Build a greeting note for Gemini (soft signal when user IS in To:)
+                greeting_note = ""
+                if greeting_names and user_name_variants:
+                    if not greeting_names.intersection(user_name_variants):
+                        greeted = " / ".join(sorted(greeting_names)[:2])
+                        greeting_note = (
+                            f"The email opens with a greeting to '{greeted}', not to you — "
+                            f"it may not require your reply."
+                        )
+
                 classification = generator.classify(
-                    build_classification_prompt(parsed, contact, own_email=own_email)
+                    build_classification_prompt(
+                        parsed, contact,
+                        own_email=own_email,
+                        greeting_note=greeting_note,
+                    )
                 )
                 priority = classification["priority"]
 

@@ -90,15 +90,18 @@ def build_classification_prompt(
     parsed: ParsedEmail,
     contact: Optional[ContactProfile],
     own_email: str = "",
+    greeting_note: str = "",
 ) -> str:
     to_line = ", ".join(parsed.to_addresses) if parsed.to_addresses else "unknown"
     cc_line = ", ".join(parsed.cc_addresses) if parsed.cc_addresses else "none"
     own_line = f"My email: {own_email}\n" if own_email else ""
+    greeting_line = f"Greeting analysis: {greeting_note}\n" if greeting_note else ""
     return (
         "Classify this email and determine whether it requires a reply.\n\n"
         f"{own_line}"
         f"To: {to_line}\n"
         f"CC: {cc_line}\n"
+        f"{greeting_line}"
         f"Sender: {parsed.sender_name} <{parsed.sender_email}>\n"
         f"Subject: {parsed.subject}\n"
         f"Known contact: {contact is not None}\n"
