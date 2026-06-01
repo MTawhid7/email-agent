@@ -52,17 +52,21 @@ def run_bulk(
             logger.error("Failed for %s: %s", row.email, exc)
 
 
-def _process_row(
+def generate_bulk_draft(
     row: _RecipientRow,
     intent: str,
-    gmail: GmailClient,
+    subject_override: str,
     generator: ReplyGenerator,
     contact_store: ContactStore,
     signature_html: str,
-) -> None:
+) -> tuple[str, str]:
+    """
+    Generate personalised email content for one recipient.
+    Returns (subject, body_html) — does NOT make any Gmail API call.
+    Called by routes/bulk.py to push items into the in-app Review Queue.
+    """
     contact = contact_store.lookup(row.email)
 
-    # Merge CSV notes with stored notes if both exist
     merged_notes = _merge_notes(row.notes, contact.notes if contact else "")
     if contact and merged_notes != contact.notes:
         contact = ContactProfile(
@@ -75,10 +79,8 @@ def _process_row(
     elif contact is None and row.notes:
         contact = ContactProfile(email=row.email, name=row.name, notes=row.notes)
 
-    # Build a minimal ParsedEmail to reuse the shared prompt builder
     first_name = row.name.split()[0] if row.name else row.email.split("@")[0]
     parsed = _minimal_parsed_email(row.name, row.email, first_name)
-
     user_message = build_user_message(parsed, contact, mode="bulk", intent=intent)
 
     try:
@@ -87,8 +89,22 @@ def _process_row(
         raise GenerationError(f"Generation failed for {row.email}: {exc}") from exc
 
     final_html = assemble(first_name, body, signature_html)
-    subject = f"Re: {intent[:60]}" if len(intent) > 60 else intent
+    subject = subject_override.strip() or (intent[:60] if intent else "Hello")
+    return subject, final_html
 
+
+def _process_row(
+    row: _RecipientRow,
+    intent: str,
+    gmail: GmailClient,
+    generator: ReplyGenerator,
+    contact_store: ContactStore,
+    signature_html: str,
+) -> None:
+    """Legacy: generate draft and create it in Gmail immediately."""
+    subject, final_html = generate_bulk_draft(
+        row, intent, "", generator, contact_store, signature_html
+    )
     gmail.create_draft(to=row.email, subject=subject, body_html=final_html)
     logger.info("Draft created for %s <%s>", row.name, row.email)
 

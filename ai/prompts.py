@@ -12,9 +12,12 @@ Follow the persona instructions below exactly:
 {persona}
 
 Rules:
-- Output the email body ONLY. No greeting line. No signature. No subject line.
+- Output the email body ONLY — do NOT include a greeting (e.g. "Dear X," or "Hi X,"),
+  do NOT include a farewell or sign-off, do NOT include a subject line.
+  The greeting is prepended automatically; writing one creates unwanted duplication.
 - Be concise. Do not pad the response.
-- Address the recipient by their first name only in the body if needed (not as a greeting).
+- If you need to address the recipient by name inside the body, use their first name
+  naturally in a sentence — never as a standalone greeting line.
 {extra_rules}
 {facts_block}"""
 

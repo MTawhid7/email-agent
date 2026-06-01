@@ -23,10 +23,16 @@
       <input type="hidden" name="input_mode" value="manual">
 
       <div class="field">
+        <label class="label">Email Subject</label>
+        <input type="text" name="subject" placeholder="e.g. Following up on our Q2 proposal" class="input">
+        <p class="hint">Optional. Leave blank to use the intent text as the subject.</p>
+      </div>
+
+      <div class="field">
         <label class="label label-required">Email Intent</label>
         <textarea name="intent" rows="2" required class="textarea"
           placeholder="e.g. Follow up on our Q2 proposal and introduce the new pricing options"></textarea>
-        <p class="hint">What the email should communicate — used as subject and the AI's main instruction.</p>
+        <p class="hint">Instructions for the AI — what the email should communicate. Not shown to recipients.</p>
       </div>
 
       <div class="field">
@@ -68,9 +74,15 @@
         <input type="file" name="csv_file" accept=".csv" required class="input" style="height:auto;padding:var(--sp-2) var(--sp-3);">
       </div>
       <div class="field">
+        <label class="label">Email Subject</label>
+        <input type="text" name="subject" placeholder="e.g. Following up on our Q2 proposal" class="input">
+        <p class="hint">Optional. Leave blank to use the intent text as the subject.</p>
+      </div>
+      <div class="field">
         <label class="label label-required">Email Intent</label>
         <textarea name="intent" rows="2" required class="textarea"
           placeholder="e.g. Follow up on our Q2 proposal…"></textarea>
+        <p class="hint">Instructions for the AI — not shown to recipients.</p>
       </div>
       {{ btn('Generate Drafts', variant='primary', type='submit', cls='btn-lg', attrs='style="width:100%;"') }}
     </form>
@@ -82,10 +94,16 @@
       <input type="hidden" name="input_mode" value="contacts">
 
       <div class="field">
+        <label class="label">Email Subject</label>
+        <input type="text" name="subject" placeholder="e.g. Following up on our Q2 proposal" class="input">
+        <p class="hint">Optional. Leave blank to use the intent text as the subject.</p>
+      </div>
+
+      <div class="field">
         <label class="label label-required">Email Intent</label>
         <textarea name="intent" rows="2" required class="textarea"
           placeholder="e.g. Follow up on our Q2 proposal…"></textarea>
-        <p class="hint">What the email should communicate — the AI personalises each draft for the recipient.</p>
+        <p class="hint">Instructions for the AI — the AI personalises each draft for the recipient. Not shown to recipients.</p>
       </div>
 
       <div class="field">
@@ -168,7 +186,10 @@
   <div id="done-banner" style="display:none;margin-top:var(--sp-4);">
     <div class="alert alert-success">
       <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
-      <span>All done! Open Gmail → Drafts to review and send. <a href="/bulk" style="color:inherit;font-weight:600;margin-left:8px;">Start another batch →</a></span>
+      <span>All done! Drafts are ready in the Review Queue.
+        <a href="/review" style="color:inherit;font-weight:600;margin-left:8px;">Review &amp; send →</a>
+        <a href="/bulk" style="color:inherit;font-weight:500;margin-left:12px;opacity:0.7;">New batch</a>
+      </span>
     </div>
   </div>
 </div>

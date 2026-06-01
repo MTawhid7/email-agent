@@ -4,19 +4,17 @@ import os
 import tempfile
 import threading
 import uuid
+from datetime import datetime
 
 from flask import Blueprint, jsonify, redirect, render_template, request, url_for
 
+from agent.review_queue import review_queue
 from ai.reply_generator import ReplyGenerator
 from config import load_settings_from_dict
 from contacts.contact_store import ContactStore
-from gmail_client.auth import get_credentials
-from gmail_client.gmail_client import GmailClient
 from signature.signature import SignatureBuilder
 from storage.app_config import (
     get_contacts_path,
-    get_credentials_path,
-    get_token_path,
     load_config,
 )
 
@@ -37,6 +35,7 @@ def bulk():
 @bulk_bp.route("/bulk", methods=["POST"])
 def bulk_submit():
     intent = request.form.get("intent", "").strip()
+    subject = request.form.get("subject", "").strip()
     input_mode = request.form.get("input_mode", "csv")
 
     def _render_error(msg: str):
@@ -80,7 +79,7 @@ def bulk_submit():
 
     threading.Thread(
         target=_run_bulk_job,
-        args=(job_id, csv_path, intent),
+        args=(job_id, csv_path, intent, subject),
         daemon=True,
     ).start()
 
@@ -129,19 +128,14 @@ def _recipients_to_temp_csv(rows: list[dict]) -> str:
 
 # ── Background job ─────────────────────────────────────────────────────────────
 
-def _run_bulk_job(job_id: str, csv_path: str, intent: str) -> None:
+def _run_bulk_job(job_id: str, csv_path: str, intent: str, subject: str = "") -> None:
     try:
         raw = load_config()
         settings = load_settings_from_dict(raw)
-        creds = get_credentials(
-            credentials_path=get_credentials_path(),
-            token_path=get_token_path(),
-        )
-        gmail = GmailClient(creds)
         generator = ReplyGenerator(settings)
         contact_store = ContactStore(path=get_contacts_path())
         sig_builder = SignatureBuilder(settings)
-        _run_bulk_tracked(job_id, csv_path, intent, gmail, generator, contact_store, sig_builder)
+        _run_bulk_tracked(job_id, csv_path, intent, subject, generator, contact_store, sig_builder)
     except Exception as exc:
         with _jobs_lock:
             _jobs[job_id]["log"].append({"level": "error", "message": f"Job failed: {exc}"})
@@ -153,8 +147,8 @@ def _run_bulk_job(job_id: str, csv_path: str, intent: str) -> None:
             pass
 
 
-def _run_bulk_tracked(job_id, csv_path, intent, gmail, generator, contact_store, sig_builder):
-    from bulk.bulk_sender import _load_csv, _process_row
+def _run_bulk_tracked(job_id, csv_path, intent, subject, generator, contact_store, sig_builder):
+    from bulk.bulk_sender import _load_csv, generate_bulk_draft
 
     rows = _load_csv(csv_path)
     signature_html = sig_builder.build_html()
@@ -164,12 +158,32 @@ def _run_bulk_tracked(job_id, csv_path, intent, gmail, generator, contact_store,
 
     for row in rows:
         try:
-            _process_row(row, intent, gmail, generator, contact_store, signature_html)
+            draft_subject, body_html = generate_bulk_draft(
+                row, intent, subject, generator, contact_store, signature_html
+            )
+            # Push to in-app Review Queue instead of creating a Gmail draft immediately.
+            # The user reviews, edits, and sends from the Review page.
+            item_id = str(uuid.uuid4())
+            review_queue.push({
+                "id": item_id,
+                "source": "bulk",          # distinguishes from inbound reply items
+                "sender_name": row.name,   # displayed as recipient name in review UI
+                "sender_email": row.email, # the TO address when sending
+                "subject": draft_subject,
+                "thread_id": "",           # new outbound email — no existing thread
+                "message_id_header": "",
+                "latest_message_id": "",
+                "body_html": body_html,
+                "created_at": datetime.now().isoformat(),
+                "priority": "normal",
+                "summary": "",
+                "thread_messages": [],
+            })
             with _jobs_lock:
                 _jobs[job_id]["done"] += 1
                 _jobs[job_id]["log"].append({
                     "level": "success",
-                    "message": f"Draft created for {row.name} <{row.email}>",
+                    "message": f"Draft queued for {row.name} <{row.email}>",
                 })
         except Exception as exc:
             with _jobs_lock:
