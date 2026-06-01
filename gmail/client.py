@@ -9,7 +9,7 @@ from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
-from exceptions import AuthError, GmailAPIError, GmailPermissionError
+from core.exceptions import AuthError, GmailAPIError, GmailPermissionError
 
 logger = logging.getLogger(__name__)
 
@@ -130,7 +130,7 @@ class GmailClient:
         Raises HistoryExpiredError if start_history_id is older than ~30 days.
         Raises GmailAPIError on other errors.
         """
-        from exceptions import HistoryExpiredError
+        from core.exceptions import HistoryExpiredError
         from googleapiclient.errors import HttpError
 
         thread_ids: list[str] = []

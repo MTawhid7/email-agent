@@ -1,22 +1,28 @@
+"""
+Email Agent daemon.
+
+Responsible for lifecycle management only:
+  - Start / stop / status
+  - IMAP IDLE watcher (real-time push notifications)
+  - TokenManager (proactive OAuth refresh)
+  - historyId cursor (Gmail History API catch-up)
+  - Activity log + draft counter
+
+Per-email AI processing is delegated to agent.pipeline.EmailPipeline.
+"""
 import logging
-import re
 import threading
 import time
-import uuid
 from collections import deque
 from datetime import date, datetime
 from typing import Optional
 
-from ai.prompts import build_classification_prompt, build_summary_prompt, build_user_message
-from ai.reply_generator import ReplyGenerator
-from agent.review_queue import review_queue
-from assembler import assemble
-from config import load_settings_from_dict
+from agent.pipeline import EmailPipeline
+from agent.queue import review_queue
+from core.config import load_settings_from_dict
+from core.exceptions import AuthError, EmailAgentError
+from gmail.client import GmailClient
 from contacts.contact_store import ContactStore
-from email_parser.attachment_reader import fetch_and_summarise
-from email_parser.parser import parse_thread
-from exceptions import AuthError, EmailAgentError
-from gmail_client.gmail_client import GmailClient
 from signature.signature import SignatureBuilder
 from storage.app_config import (
     get_contacts_path,
@@ -28,50 +34,21 @@ from storage.app_config import (
 logger = logging.getLogger(__name__)
 
 _MAX_LOG_ENTRIES = 100
-_PRIORITY_EMOJI = {"high": "🔴", "normal": "🟡", "low": "⚪", "skip": "⏭"}
-
-# ── Greeting name detection ────────────────────────────────────────────────────
-# Matches the opening of a common greeting and captures the text that follows,
-# stopping at the first sentence-ending punctuation or newline.
-_GREETING_RE = re.compile(
-    r"\b(?:hi|hello|dear|hey|greetings?|good\s+(?:morning|afternoon|evening))"
-    r"\s*[,!]?\s+(.{1,100}?)(?:[.!,\n]|$)",
-    re.IGNORECASE,
-)
-# Capitalized words that look like names but are generic group/role words
-_GENERIC_GREETING_WORDS = frozenset({
-    "there", "all", "everyone", "team", "folks", "guys", "colleagues",
-    "friends", "sir", "madam", "valued", "client", "clients", "customer",
-    "customers", "community", "partner", "partners", "and", "the",
-})
-
-
-def _extract_greeting_names(body: str) -> frozenset[str]:
-    """
-    Extract all personal names from the opening greeting of an email body.
-    Looks only at the first 250 characters (greetings are always at the top).
-
-    "Hi John"              → {"john"}
-    "Hi John and Tawhid"   → {"john", "tawhid"}
-    "Dear Mr. Smith,"      → {"smith"}
-    "Hi team"              → set()   ← generic word, not a personal name
-    "Hello there"          → set()
-    No greeting            → set()
-    """
-    m = _GREETING_RE.search(body[:250])
-    if not m:
-        return frozenset()
-    # Find all capitalised words in the matched greeting fragment
-    names = {
-        word.lower()
-        for word in re.findall(r"\b([A-Z][a-zA-Z'\-]{1,25})\b", m.group(1))
-        if word.lower() not in _GENERIC_GREETING_WORDS
-    }
-    return frozenset(names)
 
 
 class AgentDaemon:
-    """Background email processing daemon. All public methods are thread-safe."""
+    """
+    Background email processing daemon. All public methods are thread-safe.
+
+    Lifecycle:
+        start() → _run_loop() [background thread]
+            └─ _build_components(): initialise TokenManager, GmailClient,
+               ReplyGenerator, ContactStore, EmailPipeline
+            └─ ImapIdleWatcher: wakes _wake_event on new mail
+            └─ loop: wait on _wake_event → _process_unread_incremental()
+                     → pipeline.process_batch(thread_ids)
+        stop() → signals _stop_event, stops IMAP watcher and TokenManager
+    """
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
@@ -81,12 +58,17 @@ class AgentDaemon:
         self._draft_count_today: int = 0
         self._draft_count_date: date = date.today()
         self._error: Optional[str] = None
-        self._detected_email: str = ""   # auto-fetched from Gmail API on first run
-        # Interaction history (System 2/3)
-        self._interaction_store = None   # set in _build_components
-        self._pending_history: dict[str, dict] = {}  # keyed by item_id
-        # Token lifecycle (System 5)
-        self._token_manager = None       # set in _build_components
+        self._detected_email: str = ""
+        # Interaction history (set in _build_components)
+        self._interaction_store = None
+        self._pending_history: dict[str, dict] = {}
+        # Infrastructure (set in _build_components)
+        self._token_manager = None
+        self._pipeline: Optional[EmailPipeline] = None
+        # Observability (set in _build_components)
+        self._obs_logger = None
+        self._obs_state = None
+        self._obs_traces = None
 
     # ── Public API ─────────────────────────────────────────────────────────────
 
@@ -98,12 +80,10 @@ class AgentDaemon:
             self._error = None
             self._thread = threading.Thread(target=self._run_loop, name="AgentDaemon", daemon=True)
             self._thread.start()
-        # _append_log called OUTSIDE the lock — it acquires its own lock internally
         self._append_log("info", "Agent started.")
 
     def stop(self) -> None:
         self._stop_event.set()
-        # Unblock the waiting _run_loop immediately
         if hasattr(self, "_wake_event"):
             self._wake_event.set()
         if self._imap_watcher:
@@ -139,19 +119,47 @@ class AgentDaemon:
                 "review_count": review_queue.count(),
             }
 
+    def resolve_review_item(self, item_id: str, action: str) -> None:
+        """
+        Update the activity log entry and record interaction history.
+        action: 'sent' → green  |  'discarded' → gray
+        Called from routes/review.py after Send Now or Discard.
+        """
+        level = "success" if action == "sent" else "discarded"
+        for entry in self._logs:
+            if entry.get("item_id") == item_id:
+                entry["level"] = level
+                entry["resolved"] = action
+                break
+
+        hist = self._pending_history.pop(item_id, None)
+        if hist and action == "sent" and self._interaction_store:
+            try:
+                from history.interaction_store import InteractionRecord
+                self._interaction_store.record(
+                    hist["sender_email"],
+                    InteractionRecord(
+                        thread_id=hist["thread_id"],
+                        date=hist["date"],
+                        subject=hist["subject"],
+                        summary=hist["summary"],
+                        our_reply_summary=hist["our_reply_summary"],
+                        topics=hist["topics"],
+                    ),
+                )
+            except Exception as exc:
+                logger.warning("Failed to record interaction history: %s", exc)
+
     # ── Internal loop ──────────────────────────────────────────────────────────
 
-    # wake_event and imap_watcher are initialised here so stop() can access them
-    # even before _run_loop() starts (e.g. if start() is called then stop() quickly).
     _wake_event: threading.Event
     _imap_watcher = None
 
     def _run_loop(self) -> None:
-        # Initialise the wake event for this run (cleared state)
         self._wake_event = threading.Event()
 
         try:
-            settings, gmail, generator, contact_store, signature_html = self._build_components()
+            settings, gmail = self._build_components()
         except AuthError as exc:
             self._set_error(f"Auth error: {exc}")
             return
@@ -159,8 +167,7 @@ class AgentDaemon:
             self._set_error(f"Startup failed: {exc}")
             return
 
-        # Start IMAP IDLE watcher — it fires _wake_event when new mail arrives
-        from gmail_client.imap_watcher import ImapIdleWatcher
+        from gmail.imap_watcher import ImapIdleWatcher
         own_email = settings.own_email or self._detected_email or ""
         self._imap_watcher = ImapIdleWatcher(
             token_manager=self._token_manager,
@@ -169,11 +176,10 @@ class AgentDaemon:
         )
         self._imap_watcher.start()
 
-        # Run one immediate check on startup (catches emails that arrived while offline)
+        # Immediate check on startup catches emails that arrived while offline
         self._wake_event.set()
 
         while not self._stop_event.is_set():
-            # Wait for IMAP signal or 60-second fallback heartbeat
             self._wake_event.wait(timeout=60)
             self._wake_event.clear()
 
@@ -181,9 +187,7 @@ class AgentDaemon:
                 break
 
             try:
-                count = self._process_unread_incremental(
-                    gmail, generator, contact_store, signature_html, settings
-                )
+                count = self._process_unread_incremental(gmail, settings)
                 if not count:
                     self._append_log("info", "No new emails.")
                 else:
@@ -197,10 +201,20 @@ class AgentDaemon:
                 self._append_log("error", f"Unexpected error: {exc}")
 
     def _build_components(self):
-        from gmail_client.token_manager import TokenManager
+        from gmail.token_manager import TokenManager
+        from ai.generator import ReplyGenerator
+        from history.interaction_store import InteractionStore
+        from observability.log_writer import AgentLogger
+        from observability.state import StateManager
+        from observability.trace import TraceStore
+        from storage.app_config import (
+            get_history_path, get_log_path, get_debug_state_path,
+            get_traces_path, merge_and_save_config,
+        )
+
         raw = load_config()
         settings = load_settings_from_dict(raw)
-        # TokenManager loads credentials immediately, then starts background refresh
+
         self._token_manager = TokenManager(
             credentials_path=get_credentials_path(),
             token_path=get_token_path(),
@@ -212,111 +226,51 @@ class AgentDaemon:
         contact_store = ContactStore(path=get_contacts_path())
         signature_html = SignatureBuilder(settings).build_html()
 
-        # Auto-detect the connected Gmail address once; save it so Settings can display it.
         if not settings.own_email:
             try:
                 detected = gmail.get_own_email().lower()
                 if detected:
                     self._detected_email = detected
-                    from storage.app_config import merge_and_save_config
                     merge_and_save_config({"own_email": detected})
             except Exception:
                 pass
         else:
             self._detected_email = settings.own_email
 
-        # Interaction history store (System 2/3)
-        from history.interaction_store import InteractionStore
-        from storage.app_config import get_history_path
         self._interaction_store = InteractionStore(path=get_history_path())
 
-        return settings, gmail, generator, contact_store, signature_html
-
-    def _user_name_variants(self, settings) -> frozenset[str]:
-        """
-        Return the lowercase name tokens the user is known by.
-        Built from settings.signature_name and the prefix of own_email.
-        "Tawhid Islam", "tawhid@company.com" → {"tawhid", "islam"}
-        "Md. Tawhidul Islam", "t.islam@co.com" → {"md", "tawhidul", "islam", "t"}
-        """
-        variants: set[str] = set()
-        if settings.signature_name:
-            for token in re.split(r"[\s.\-_]+", settings.signature_name):
-                clean = re.sub(r"[^a-z]", "", token.lower())
-                if len(clean) >= 2:
-                    variants.add(clean)
-        email = settings.own_email or self._detected_email or ""
-        if "@" in email:
-            prefix = email.split("@")[0].lower()
-            for part in re.split(r"[.\-_]+", prefix):
-                if len(part) >= 2:
-                    variants.add(part)
-        return frozenset(variants)
-
-    def _should_skip_as_observer(
-        self,
-        parsed,
-        contact,
-        settings,
-        greeting_names: frozenset = frozenset(),
-        user_name_variants: frozenset = frozenset(),
-    ) -> tuple[bool, str]:
-        """
-        Returns (True, reason) when the agent user should not reply because they are
-        an observer (only CC'd) or because a teammate is keeping them informed.
-        Runs before any Gemini API call to avoid wasting tokens.
-
-        greeting_names:      names extracted from the opening greeting line
-        user_name_variants:  lowercase name tokens the user is known by
-        """
-        own = (settings.own_email or self._detected_email or "").lower().strip()
-        team_domain = (settings.team_domain or "").lower().strip()
-        sender_domain = parsed.sender_email.split("@")[-1].lower() if "@" in parsed.sender_email else ""
-        sender_is_teammate = bool(
-            (team_domain and sender_domain == team_domain)
-            or (contact and getattr(contact, "is_teammate", False))
+        # Observability
+        self._obs_logger = AgentLogger(
+            path=get_log_path(),
+            debug_mode=getattr(settings, "debug_mode", False),
         )
-        if own:
-            user_in_to = any(own in addr for addr in parsed.to_addresses)
-            user_in_cc = any(own in addr for addr in parsed.cc_addresses)
-            # BCC case: email arrived but user isn't in visible To: or CC: headers.
-            # Guard with `parsed.to_addresses` to avoid false positives when header
-            # parsing produced nothing (e.g. malformed message).
-            bcc_or_forwarded = bool(parsed.to_addresses) and not user_in_to and not user_in_cc
-            user_is_observer = (user_in_cc and not user_in_to) or bcc_or_forwarded
-        else:
-            user_is_observer = False  # can't determine without own_email
-        if sender_is_teammate and user_is_observer:
-            return True, "CC'd/BCC'd on teammate's outbound thread"
-        if not sender_is_teammate and user_is_observer:
-            return True, "CC'd/BCC'd as observer — not primary addressee"
+        self._obs_state = StateManager(path=get_debug_state_path())
+        self._obs_traces = TraceStore(path=get_traces_path())
+        self._obs_state.daemon_started()
 
-        # Greeting name check — only hard-skip when the user is already an observer
-        # by headers AND the greeting confirms someone else is addressed.
-        # When user IS in To:, greeting mismatch is only a soft signal (passed to
-        # Gemini via greeting_note rather than causing a hard pre-filter skip here).
-        if greeting_names and user_name_variants:
-            if not greeting_names.intersection(user_name_variants):
-                if user_is_observer:
-                    greeted = " / ".join(sorted(greeting_names)[:2])
-                    return True, f"Greeting to '{greeted}' — not addressed to you"
+        self._pipeline = EmailPipeline(
+            gmail=gmail,
+            generator=generator,
+            contact_store=contact_store,
+            interaction_store=self._interaction_store,
+            signature_html=signature_html,
+            settings=settings,
+            detected_email=self._detected_email,
+            pending_history=self._pending_history,
+            log_callback=self._append_log,
+            obs_logger=self._obs_logger,
+            obs_traces=self._obs_traces,
+            obs_state=self._obs_state,
+        )
 
-        return False, ""
+        return settings, gmail
 
-    def _process_unread_incremental(
-        self,
-        gmail: GmailClient,
-        generator: ReplyGenerator,
-        contact_store: ContactStore,
-        signature_html: str,
-        settings,
-    ) -> int:
+    def _process_unread_incremental(self, gmail: GmailClient, settings) -> int:
         """
-        Fetch only threads added since the last run using Gmail's History API.
-        Falls back to the full unread scan if the historyId is too old or missing.
-        Persists the new historyId to config.json after each successful batch.
+        Fetch thread IDs since the last historyId cursor, then process via the pipeline.
+        Falls back to full inbox scan when historyId is missing or expired.
         """
-        from exceptions import HistoryExpiredError
+        from core.exceptions import HistoryExpiredError
         from storage.app_config import merge_and_save_config
 
         raw = load_config()
@@ -338,216 +292,9 @@ class AgentDaemon:
             if new_id:
                 merge_and_save_config({"last_history_id": new_id})
 
-        return self._process_thread_ids(
-            thread_ids, gmail, generator, contact_store, signature_html, settings
-        )
-
-    def _process_unread(
-        self,
-        gmail: GmailClient,
-        generator: ReplyGenerator,
-        contact_store: ContactStore,
-        signature_html: str,
-        settings,
-    ) -> int:
-        """Legacy full-scan method — kept for reference; _process_unread_incremental is used instead."""
-        thread_ids = gmail.list_unread_thread_ids(max_results=20)
-        return self._process_thread_ids(
-            thread_ids, gmail, generator, contact_store, signature_html, settings
-        )
-
-    def _process_thread_ids(
-        self,
-        thread_ids: list,
-        gmail: GmailClient,
-        generator: ReplyGenerator,
-        contact_store: ContactStore,
-        signature_html: str,
-        settings,
-    ) -> int:
-        count = 0
-
-        for thread_id in thread_ids:
-            try:
-                thread = gmail.get_thread(thread_id)
-                parsed = parse_thread(thread)
-                if parsed is None:
-                    continue
-
-                contact = contact_store.lookup(parsed.sender_email)
-
-                # Pre-compute greeting context once — reused by skip check AND classifier
-                greeting_names = _extract_greeting_names(parsed.latest_body)
-                user_name_variants = self._user_name_variants(settings)
-
-                # ── Teammate / observer skip (before any Gemini call) ──────────
-                should_skip, skip_reason = self._should_skip_as_observer(
-                    parsed, contact, settings, greeting_names, user_name_variants
-                )
-                if should_skip:
-                    gmail.mark_as_processed(parsed.latest_message_id)
-                    self._append_log("info", f"⏭ Skipped ({skip_reason}): {parsed.sender_name}", priority="skip")
-                    continue
-
-                # ── Feature 4: Thread summary ──────────────────────────────────
-                summary = generator.summarise(build_summary_prompt(parsed))
-
-                # ── Feature 2: Classify + newsletter / no-reply detection ─────
-                own_email = settings.own_email or self._detected_email or ""
-
-                # Build a greeting note for Gemini (soft signal when user IS in To:)
-                greeting_note = ""
-                if greeting_names and user_name_variants:
-                    if not greeting_names.intersection(user_name_variants):
-                        greeted = " / ".join(sorted(greeting_names)[:2])
-                        greeting_note = (
-                            f"The email opens with a greeting to '{greeted}', not to you — "
-                            f"it may not require your reply."
-                        )
-
-                classification = generator.classify(
-                    build_classification_prompt(
-                        parsed, contact,
-                        own_email=own_email,
-                        greeting_note=greeting_note,
-                    )
-                )
-                priority = classification["priority"]
-
-                if classification["skip"] or not classification.get("needs_reply", True):
-                    gmail.mark_as_processed(parsed.latest_message_id)
-                    self._append_log(
-                        "info",
-                        f"⏭ Skipped ({classification['reason']}): {parsed.sender_name}",
-                        summary=summary, priority="skip",
-                    )
-                    continue
-
-                if priority == "high":
-                    gmail.apply_priority_label(parsed.latest_message_id)
-
-                # ── Feature 7: Attachment summarisation ────────────────────────
-                attachment_summary = ""
-                if parsed.attachments:
-                    attachment_summary = fetch_and_summarise(
-                        gmail_client=gmail,
-                        message_id=parsed.latest_message_id,
-                        attachments=parsed.attachments,
-                        gemini_client=generator._client,
-                        model=generator._model,
-                    )
-
-                # ── Retrieve interaction history for context (System 3) ────────
-                recent_interactions = []
-                recurring_topics = []
-                if self._interaction_store:
-                    recent_interactions = self._interaction_store.get_recent(parsed.sender_email, n=5)
-                    recurring_topics = self._interaction_store.get_topics(parsed.sender_email)
-
-                # ── Generate reply ─────────────────────────────────────────────
-                user_message = build_user_message(
-                    parsed, contact, mode="reply",
-                    attachment_summary=attachment_summary,
-                    recent_interactions=recent_interactions or None,
-                    recurring_topics=recurring_topics or None,
-                )
-                body = generator.generate(user_message)
-                final_html = assemble(parsed.sender_first_name, body, signature_html)
-
-                reply_subject = (
-                    parsed.subject if parsed.subject.lower().startswith("re:")
-                    else f"Re: {parsed.subject}"
-                )
-
-                # ── Store history metadata for recording when user sends (System 2)
-                item_id = str(uuid.uuid4())   # defined here so _append_log can reference it
-                our_reply_summary = generator.summarise_reply(body)
-                topics = generator.extract_topics(parsed.latest_body, body)
-                self._pending_history[item_id] = {
-                    "sender_email": parsed.sender_email,
-                    "thread_id": parsed.thread_id,
-                    "date": datetime.now().date().isoformat(),
-                    "subject": parsed.subject,
-                    "summary": summary,
-                    "our_reply_summary": our_reply_summary,
-                    "topics": topics,
-                }
-
-                # ── Feature 1: Push to review queue ────────────────────────────
-                review_queue.push({
-                    "id": item_id,
-                    "sender_name": parsed.sender_name,
-                    "sender_email": parsed.sender_email,
-                    "subject": reply_subject,
-                    "thread_id": parsed.thread_id,
-                    "message_id_header": parsed.message_id_header,
-                    "latest_message_id": parsed.latest_message_id,
-                    "body_html": final_html,
-                    "created_at": datetime.now().isoformat(),
-                    "priority": priority,
-                    "summary": summary,
-                    # Full thread history so the Review page can show the conversation
-                    "thread_messages": [
-                        {
-                            "sender_name": m.sender_name,
-                            "sender_email": m.sender_email,
-                            "body": m.body,
-                        }
-                        for m in parsed.thread_messages
-                    ],
-                })
-
-                # Mark processed immediately so it won't be re-queued next poll
-                gmail.mark_as_processed(parsed.latest_message_id)
-
-                emoji = _PRIORITY_EMOJI.get(priority, "🟡")
-                self._append_log(
-                    "pending",   # amber — waiting for user action in Review Queue
-                    f"{emoji} Queued for review: {parsed.sender_name} <{parsed.sender_email}>",
-                    summary=summary, priority=priority, item_id=item_id,
-                )
-                count += 1
-
-            except EmailAgentError as exc:
-                self._append_log("error", f"Skipping thread {thread_id}: {exc}")
-            except Exception as exc:
-                self._append_log("error", f"Unexpected error on thread {thread_id}: {exc}")
-
-        return count
+        return self._pipeline.process_batch(thread_ids)
 
     # ── Helpers ────────────────────────────────────────────────────────────────
-
-    def resolve_review_item(self, item_id: str, action: str) -> None:
-        """
-        Update the activity log entry for a review item after the user acts.
-        action: 'sent' → green success  |  'discarded' → gray discarded
-        Called from routes/review.py after Send Now or Discard.
-        """
-        level = "success" if action == "sent" else "discarded"
-        for entry in self._logs:
-            if entry.get("item_id") == item_id:
-                entry["level"] = level
-                entry["resolved"] = action
-                break
-
-        # Record interaction history when the user sends a reply (System 2)
-        hist = self._pending_history.pop(item_id, None)
-        if hist and action == "sent" and self._interaction_store:
-            try:
-                from history.interaction_store import InteractionRecord
-                self._interaction_store.record(
-                    hist["sender_email"],
-                    InteractionRecord(
-                        thread_id=hist["thread_id"],
-                        date=hist["date"],
-                        subject=hist["subject"],
-                        summary=hist["summary"],
-                        our_reply_summary=hist["our_reply_summary"],
-                        topics=hist["topics"],
-                    ),
-                )
-            except Exception as exc:
-                logger.warning("Failed to record interaction history: %s", exc)
 
     def _append_log(self, level: str, message: str, summary: str = "",
                     priority: str = "", item_id: str = "") -> None:
@@ -557,11 +304,9 @@ class AgentDaemon:
             "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "summary": summary,
             "priority": priority,
-            "item_id": item_id,    # non-empty for review queue items
-            "resolved": "",        # set to 'sent' or 'discarded' after user action
+            "item_id": item_id,
+            "resolved": "",
         }
-        # deque.append() is thread-safe — no lock needed.
-        # Never call this while holding self._lock (threading.Lock is not reentrant).
         self._logs.append(entry)
         getattr(logger, "info" if level in ("info", "success", "pending", "discarded")
                 else level, logger.info)(message)

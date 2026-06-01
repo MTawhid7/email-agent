@@ -4,13 +4,13 @@ from dataclasses import dataclass
 from typing import Optional
 
 from ai.prompts import build_user_message
-from ai.reply_generator import ReplyGenerator
-from assembler import assemble
-from config import Settings
+from ai.generator import ReplyGenerator
+from ai.assembler import assemble
+from core.config import Settings
 from contacts.contact_store import ContactProfile, ContactStore
 from email_parser.parser import ParsedEmail, ThreadMessage
-from exceptions import GenerationError
-from gmail_client.gmail_client import GmailClient
+from core.exceptions import GenerationError
+from gmail.client import GmailClient
 from signature.signature import SignatureBuilder
 
 logger = logging.getLogger(__name__)

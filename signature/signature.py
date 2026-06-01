@@ -1,6 +1,6 @@
 from urllib.parse import urlparse
 
-from config import Settings
+from core.config import Settings
 
 # ── Icon delivery ──────────────────────────────────────────────────────────────
 #

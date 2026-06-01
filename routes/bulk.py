@@ -8,9 +8,9 @@ from datetime import datetime
 
 from flask import Blueprint, jsonify, redirect, render_template, request, url_for
 
-from agent.review_queue import review_queue
-from ai.reply_generator import ReplyGenerator
-from config import load_settings_from_dict
+from agent.queue import review_queue
+from ai.generator import ReplyGenerator
+from core.config import load_settings_from_dict
 from contacts.contact_store import ContactStore
 from signature.signature import SignatureBuilder
 from storage.app_config import (

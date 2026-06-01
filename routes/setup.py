@@ -9,7 +9,7 @@ from flask import (
     url_for,
 )
 
-from gmail_client.auth import get_credentials
+from gmail.auth import get_credentials
 from storage.app_config import (
     config_exists,
     credentials_file_exists,

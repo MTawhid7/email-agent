@@ -4,7 +4,7 @@ from pathlib import Path
 from flask import Flask, redirect, request, url_for
 
 from agent.daemon import AgentDaemon
-from agent.review_queue import review_queue  # noqa: F401 — re-exported for routes
+from agent.queue import review_queue  # noqa: F401 — re-exported for routes
 from storage.app_config import config_exists, get_token_path
 
 daemon = AgentDaemon()
@@ -33,6 +33,7 @@ def create_app() -> Flask:
     from routes.bulk import bulk_bp
     from routes.review import review_bp
     from routes.templates_route import templates_bp
+    from routes.debug import debug_bp
 
     app.register_blueprint(setup_bp)
     app.register_blueprint(dashboard_bp)
@@ -41,6 +42,7 @@ def create_app() -> Flask:
     app.register_blueprint(bulk_bp)
     app.register_blueprint(review_bp)
     app.register_blueprint(templates_bp)
+    app.register_blueprint(debug_bp)
 
     @app.before_request
     def require_setup():

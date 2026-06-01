@@ -137,6 +137,18 @@ def get_history_path() -> str:
     return str(_data_dir() / "history" / "interactions.json")
 
 
+def get_log_path() -> str:
+    return str(_data_dir() / "logs" / "agent.log")
+
+
+def get_debug_state_path() -> str:
+    return str(_data_dir() / "debug" / "state.json")
+
+
+def get_traces_path() -> str:
+    return str(_data_dir() / "debug" / "traces.json")
+
+
 def load_templates() -> list[dict]:
     p = Path(get_templates_path())
     if not p.exists():

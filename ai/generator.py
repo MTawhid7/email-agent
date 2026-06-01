@@ -3,13 +3,13 @@ import logging
 
 from google import genai
 
-from ai.fallback_router import FallbackRouter
+from ai.providers.router import FallbackRouter
 from ai.providers.gemini_provider import GeminiProvider
 from ai.providers.openai_compatible_provider import OpenAICompatibleProvider
 from ai.providers.ollama_provider import OllamaProvider
 from ai.prompts import build_system_prompt
-from config import Settings
-from exceptions import GenerationError
+from core.config import Settings
+from core.exceptions import GenerationError
 
 logger = logging.getLogger(__name__)
 

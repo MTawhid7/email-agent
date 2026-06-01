@@ -4,7 +4,7 @@ from typing import Any
 
 from dotenv import load_dotenv
 
-from exceptions import ConfigError
+from core.exceptions import ConfigError
 
 
 @dataclass(frozen=True)
@@ -32,6 +32,8 @@ class Settings:
     ollama_enabled: bool = False
     ollama_model: str = "llama3.2"
     ollama_base_url: str = "http://localhost:11434"
+    # Debug / observability
+    debug_mode: bool = False
 
 
 def _require(key: str) -> str:
@@ -52,7 +54,6 @@ def _parse_social_links(data: dict) -> tuple:
     """
     links = data.get("social_links")
     if links and isinstance(links, list):
-        # Validate and clean each entry
         result = []
         for item in links:
             if isinstance(item, dict):
@@ -115,6 +116,7 @@ def load_settings_from_dict(data: dict) -> Settings:
         ollama_enabled=str(data.get("ollama_enabled", "false")).lower() in ("true", "1", "yes"),
         ollama_model=optional("ollama_model", "llama3.2"),
         ollama_base_url=optional("ollama_base_url", "http://localhost:11434"),
+        debug_mode=str(data.get("debug_mode", "false")).lower() in ("true", "1", "yes"),
     )
 
 
@@ -126,7 +128,6 @@ def load_settings() -> Settings:
     except ValueError:
         raise ConfigError("POLL_INTERVAL_SECONDS must be a valid integer.")
 
-    # Build social_links from individual env vars for .env compatibility
     social_links_data: dict[str, Any] = {}
     for key in ("signature_linkedin", "signature_github", "signature_website"):
         val = os.getenv(key.upper(), "").strip()

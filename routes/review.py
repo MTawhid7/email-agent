@@ -1,9 +1,9 @@
 from flask import Blueprint, jsonify, redirect, render_template, request, url_for
 
 import app as app_module
-from agent.review_queue import review_queue
-from gmail_client.auth import get_credentials
-from gmail_client.gmail_client import GmailClient
+from agent.queue import review_queue
+from gmail.auth import get_credentials
+from gmail.client import GmailClient
 from storage.app_config import get_credentials_path, get_token_path
 
 review_bp = Blueprint("review", __name__)

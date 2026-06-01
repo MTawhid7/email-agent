@@ -16,8 +16,8 @@ from typing import Callable, Optional
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 
-from exceptions import AuthError, TokenRefreshError
-from gmail_client.auth import get_credentials, _save_token
+from core.exceptions import AuthError, TokenRefreshError
+from gmail.auth import get_credentials, _save_token
 
 logger = logging.getLogger(__name__)
 

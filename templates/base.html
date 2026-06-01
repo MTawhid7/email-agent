@@ -88,6 +88,14 @@
 
       <div class="sidebar-section">
         <div class="sidebar-section-label">Config</div>
+        <a href="/debug"
+          class="nav-item {% if request.path == '/debug' %}active{% endif %}"
+          aria-current="{% if request.path == '/debug' %}page{% endif %}">
+          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18"/>
+          </svg>
+          Debug
+        </a>
         <a href="/settings"
           class="nav-item {% if request.path == '/settings' %}active{% endif %}"
           aria-current="{% if request.path == '/settings' %}page{% endif %}">

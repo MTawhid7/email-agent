@@ -4,16 +4,16 @@ import time
 
 import click
 
-from ai.reply_generator import ReplyGenerator
+from ai.generator import ReplyGenerator
 from ai.prompts import build_user_message
-from assembler import assemble
+from ai.assembler import assemble
 from bulk.bulk_sender import run_bulk
-from config import load_settings
+from core.config import load_settings
 from contacts.contact_store import ContactStore
 from email_parser.parser import parse_thread
-from exceptions import AuthError, ConfigError, EmailAgentError
-from gmail_client.auth import get_credentials
-from gmail_client.gmail_client import GmailClient
+from core.exceptions import AuthError, ConfigError, EmailAgentError
+from gmail.auth import get_credentials
+from gmail.client import GmailClient
 from signature.signature import SignatureBuilder
 
 logging.basicConfig(

@@ -10,7 +10,7 @@ import logging
 import httpx
 
 from ai.providers.base import LLMProvider
-from exceptions import ProviderUnavailableError
+from core.exceptions import ProviderUnavailableError
 
 logger = logging.getLogger(__name__)
 

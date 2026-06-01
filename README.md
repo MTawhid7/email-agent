@@ -41,6 +41,10 @@ The app packages as a native desktop application (`.app` on macOS, `.exe` on Win
 | **Social Link Icons** | Brand icons (LinkedIn, GitHub, WhatsApp, etc.) in email signature via jsDelivr CDN |
 | **Knowledge Base** | Free-form facts injected into every AI prompt — prevents hallucinated phone numbers / contact details |
 | **Review Status Tracking** | Activity log reflects pending → sent / discarded state after user action |
+| **Debug Dashboard** | Live observability panel at `/debug` — system health, IMAP status, per-email processing traces, and a structured log tail |
+| **Bulk Draft Review** | Bulk-generated drafts appear in the in-app Review Queue; edit, send, or discard without leaving the app |
+| **Gmail Account Switcher** | Switch Gmail accounts from Settings without re-running the setup wizard |
+| **Smart Filtering** | CC/BCC header detection + greeting-name mismatch + Gemini reply-necessity check — three layers before generating any reply |
 | **Desktop App** | Packaged as `.app` / `.exe` via PyInstaller — no terminal required for end users; new version auto-evicts the old process on launch |
 
 ---
@@ -240,12 +244,14 @@ The app is designed for team distribution. Each person uses their own Gmail acco
 
 | Layer | Technology |
 |---|---|
-| AI | [Google Gemini](https://ai.google.dev/) (`google-genai`) |
-| Email | [Gmail API](https://developers.google.com/gmail/api) (`google-api-python-client`) |
+| AI (primary) | [Google Gemini](https://ai.google.dev/) (`google-genai`) |
+| AI (fallback) | Any OpenAI-compatible API via `httpx` — Groq, xAI Grok, OpenAI, Mistral, Ollama |
+| Email | [Gmail API v1](https://developers.google.com/gmail/api) (`google-api-python-client`) |
+| Real-time inbox | IMAP IDLE (`imapclient`, XOAUTH2) + Gmail History API cursor |
 | Web framework | [Flask](https://flask.palletsprojects.com/) 3.0 |
 | Frontend | [Alpine.js](https://alpinejs.dev/) (reactive stores), [Inter](https://rsms.me/inter/) font, custom CSS design system |
 | Packaging | [PyInstaller](https://pyinstaller.org/) + GitHub Actions |
-| Auth | OAuth 2.0 via `google-auth-oauthlib` |
+| Auth | OAuth 2.0 via `google-auth-oauthlib` with proactive background refresh |
 
 ---
 

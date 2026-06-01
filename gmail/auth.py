@@ -4,7 +4,7 @@ from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 
-from exceptions import AuthError
+from core.exceptions import AuthError
 
 _SCOPES = ["https://www.googleapis.com/auth/gmail.modify"]
 _TOKEN_PATH = "credentials/token.json"

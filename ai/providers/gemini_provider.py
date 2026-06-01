@@ -6,7 +6,7 @@ from google.genai import types
 from google.genai.errors import ClientError, ServerError
 
 from ai.providers.base import LLMProvider
-from exceptions import GenerationError, ProviderUnavailableError
+from core.exceptions import GenerationError, ProviderUnavailableError
 
 logger = logging.getLogger(__name__)
 

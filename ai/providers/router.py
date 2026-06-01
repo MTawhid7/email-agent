@@ -2,7 +2,7 @@ import logging
 from typing import Optional
 
 from ai.providers.base import LLMProvider
-from exceptions import GenerationError, ProviderUnavailableError
+from core.exceptions import GenerationError, ProviderUnavailableError
 
 logger = logging.getLogger(__name__)
 
