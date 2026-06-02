@@ -163,6 +163,11 @@
           value=config.get('signature_name',''),
           placeholder='Jane Doe', required=True) }}
 
+      {{ input_field('name_aliases', 'Also Known As',
+          value=config.get('name_aliases',''),
+          placeholder='Muhammad, Mohamed, Tawhid, Tareq',
+          hint='Other names or nicknames people use when addressing you — comma-separated. The agent uses these to recognise that an email greeted "Hi Muhammad" is still addressed to you, not someone else.') }}
+
       <div class="grid-2">
         {{ input_field('signature_title', 'Job Title',
             value=config.get('signature_title',''), placeholder='Product Manager') }}

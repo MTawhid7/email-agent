@@ -174,6 +174,11 @@ or via lazy imports). After adding a new package, add it to `hiddenimports`.
 5. If the daemon needs it immediately: it reads settings from `load_config()` in
    `_build_components()`, so the daemon restart triggered by saving settings picks it up
 
+**Example — `name_aliases` (recently added):**
+Comma-separated alternate names the user goes by. Consumed by `_user_name_variants()` in
+`agent/pipeline.py` to widen the set of names that count as a greeting match, preventing
+false skips when someone addresses you as "Muhammad" instead of "Md. Tawhidul Islam".
+
 ---
 
 ## How to add a new email processing step
@@ -185,13 +190,15 @@ The steps run in this order:
 parse_thread()
   → contact_store.lookup()
   → _extract_greeting_names()
-  → _should_skip_as_observer()   [structural skip — no Gemini]
-  → generator.summarise()         [Gemini call 1]
-  → generator.classify()          [Gemini call 2]
-  → fetch_and_summarise()         [conditional: attachments only]
+  → _user_name_variants()          [builds set from signature_name + email prefix + name_aliases]
+  → _should_skip_as_observer()     [structural skip — no Gemini]
+      ↳ greeting check via _names_match() [fuzzy: exact → prefix → SequenceMatcher ≥ 0.80]
+  → generator.summarise()          [Gemini call 1]
+  → generator.classify()           [Gemini call 2 — greeting_note injected if names mismatch]
+  → fetch_and_summarise()          [conditional: attachments only]
   → interaction_store.get_recent() [context retrieval]
   → build_user_message()
-  → generator.generate()          [Gemini call 3]
+  → generator.generate()           [Gemini call 3]
   → assemble()
   → review_queue.push()
   → gmail.mark_as_processed()

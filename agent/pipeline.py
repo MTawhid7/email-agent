@@ -15,6 +15,7 @@ import logging
 import re
 import uuid
 from datetime import datetime
+from difflib import SequenceMatcher
 from typing import Callable, Optional
 
 from ai.assembler import assemble
@@ -64,6 +65,34 @@ def _extract_greeting_names(body: str) -> frozenset[str]:
         if word.lower() not in _GENERIC_GREETING_WORDS
     }
     return frozenset(names)
+
+
+def _names_match(greeting_names: frozenset[str], user_variants: frozenset[str]) -> bool:
+    """
+    True if any greeting name is close enough to any user variant.
+
+    Three passes in order of cost:
+      1. Exact match (set intersection) — cheapest
+      2. Prefix containment — "tawhid" matches "tawhidul" and vice-versa
+      3. Fuzzy similarity via SequenceMatcher — handles transliterations and
+         single-character typos ("tarek" ↔ "tareq", "muhammad" ↔ "mahammad")
+
+    Short tokens (< 4 chars) are excluded from fuzzy/prefix to avoid false
+    positives on abbreviations like "md".
+    """
+    for gname in greeting_names:
+        for variant in user_variants:
+            if gname == variant:
+                return True
+            # Prefix: shorter must be at least 4 chars to avoid "md" false-matches
+            shorter, longer = (gname, variant) if len(gname) <= len(variant) else (variant, gname)
+            if len(shorter) >= 4 and longer.startswith(shorter):
+                return True
+            # Fuzzy: same rough length (≤2 char diff), both at least 4 chars
+            if len(gname) >= 4 and len(variant) >= 4 and abs(len(gname) - len(variant)) <= 2:
+                if SequenceMatcher(None, gname, variant).ratio() >= 0.80:
+                    return True
+    return False
 
 
 class EmailPipeline:
@@ -183,7 +212,7 @@ class EmailPipeline:
 
         greeting_note = ""
         if greeting_names and user_name_variants:
-            if not greeting_names.intersection(user_name_variants):
+            if not _names_match(greeting_names, user_name_variants):
                 greeted = " / ".join(sorted(greeting_names)[:2])
                 greeting_note = (
                     f"The email opens with a greeting to '{greeted}', not to you — "
@@ -336,7 +365,7 @@ class EmailPipeline:
             return True, "CC'd/BCC'd as observer — not primary addressee"
 
         if greeting_names and user_name_variants:
-            if not greeting_names.intersection(user_name_variants):
+            if not _names_match(greeting_names, user_name_variants):
                 if user_is_observer:
                     greeted = " / ".join(sorted(greeting_names)[:2])
                     return True, f"Greeting to '{greeted}' — not addressed to you"
@@ -357,4 +386,11 @@ class EmailPipeline:
             for part in re.split(r"[.\-_]+", prefix):
                 if len(part) >= 2:
                     variants.add(part)
+        # User-defined aliases: "Muhammad, Mohamed, Tawhid, Tareq" → each lowercased token
+        aliases_raw = getattr(self._settings, "name_aliases", "") or ""
+        for alias in re.split(r"[,;]+", aliases_raw):
+            for token in re.split(r"[\s.\-_]+", alias):
+                clean = re.sub(r"[^a-z]", "", token.lower())
+                if len(clean) >= 2:
+                    variants.add(clean)
         return frozenset(variants)

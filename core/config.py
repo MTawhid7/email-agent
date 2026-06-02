@@ -32,6 +32,10 @@ class Settings:
     ollama_enabled: bool = False
     ollama_model: str = "llama3.2"
     ollama_base_url: str = "http://localhost:11434"
+    # Alternate names / aliases — comma-separated names the user is also known by
+    # (e.g. "Muhammad, Mohamed, Tawhid, Tareq"). Used by the greeting-match check
+    # so the agent doesn't misread an email addressed to a variant of your name.
+    name_aliases: str = ""
     # Debug / observability
     debug_mode: bool = False
 
@@ -117,6 +121,7 @@ def load_settings_from_dict(data: dict) -> Settings:
         ollama_model=optional("ollama_model", "llama3.2"),
         ollama_base_url=optional("ollama_base_url", "http://localhost:11434"),
         debug_mode=str(data.get("debug_mode", "false")).lower() in ("true", "1", "yes"),
+        name_aliases=optional("name_aliases"),
     )
 
 

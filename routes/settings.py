@@ -40,6 +40,7 @@ def settings():
             "ollama_enabled": request.form.get("ollama_enabled") == "true",
             "ollama_model": request.form.get("ollama_model", "llama3.2").strip(),
             "ollama_base_url": request.form.get("ollama_base_url", "http://localhost:11434").strip(),
+            "name_aliases": request.form.get("name_aliases", "").strip(),
         }
 
         if not updated["gemini_api_key"]:

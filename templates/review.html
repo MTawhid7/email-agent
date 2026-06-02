@@ -11,8 +11,10 @@
   <div style="display:flex;align-items:center;gap:var(--sp-3);">
     <span style="font-size:var(--text-sm);color:var(--text-tertiary);">{{ items|length }} pending</span>
     {% if items %}
+    {% set _cnt = items|length %}
+    {% set _s = "s" if _cnt != 1 else "" %}
     <form method="POST" action="/review/send-all"
-      onsubmit="return confirm('Send all {{ items|length }} email{{ \'s\' if items|length != 1 else \'\' }} now? Each will be sent immediately without further review. This cannot be undone.')">
+      onsubmit="return confirm('Send all {{ _cnt }} email{{ _s }} now? Each will be sent immediately without further review. This cannot be undone.')">
       <button type="submit" class="btn btn-primary btn-sm"
         style="display:flex;align-items:center;gap:6px;">
         <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"

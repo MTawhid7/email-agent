@@ -33,6 +33,7 @@ The app packages as a native desktop application (`.app` on macOS, `.exe` on Win
 | **Bulk Send** | Generate personalised drafts for multiple recipients — enter manually, upload a CSV, or pick from saved contacts |
 | **Contact Management** | Per-contact notes and tone preferences; mark contacts as Teammates; add individually, import from CSV, or select in bulk send |
 | **Teammate-Aware Skipping** | Automatically skips emails where you are only CC'd — distinguishes observer threads from emails that need a reply |
+| **Fuzzy Name Matching** | Name aliases field accepts alternate spellings and nicknames (e.g. "Muhammad, Tawhid, Tareq"). Greeting matching uses prefix and fuzzy similarity so "Tarek" matches "Tareq" and "Tawhidul" matches "Tawhid" — prevents false skips on transliterations and typos |
 | **Multi-Provider LLM Failover** | Gemini is primary; Groq / xAI Grok / OpenAI / Ollama used as fallback on rate limits or outages |
 | **Conversation Memory** | Per-contact interaction history — recent replies and recurring topics injected into every generation prompt |
 | **Real-Time Inbox** | IMAP IDLE push notifications replace polling; replies are generated within seconds of email arrival |
@@ -53,37 +54,46 @@ The app packages as a native desktop application (`.app` on macOS, `.exe` on Win
 
 ```
 Email Agent/
-├── agent/                  # Background daemon thread + review queue
-│   ├── daemon.py           # Polling loop: classify → summarise → generate → queue
-│   └── review_queue.py     # Thread-safe in-memory queue
-├── ai/
-│   ├── prompts.py          # System + user prompt builders
-│   └── reply_generator.py  # Gemini API wrapper (generate, classify, summarise)
+├── agent/                  # Background daemon + review queue
+│   ├── daemon.py           # Lifecycle: start/stop, IMAP IDLE, token, historyId
+│   ├── pipeline.py         # Per-email AI pipeline: parse → skip → classify → generate → queue
+│   └── queue.py            # Thread-safe in-memory ReviewQueue singleton
+├── ai/                     # AI generation layer
+│   ├── assembler.py        # Pure function: greeting + body + signature → HTML
+│   ├── generator.py        # ReplyGenerator with LLM failover
+│   ├── prompts.py          # All prompt builders
+│   └── providers/          # GeminiProvider, OpenAICompatibleProvider, OllamaProvider
 ├── bulk/
-│   └── bulk_sender.py      # Batch draft generation from CSV
+│   └── bulk_sender.py      # Batch draft generation from CSV / manual / saved contacts
 ├── contacts/
 │   └── contact_store.py    # JSON-backed contact profiles
+├── core/
+│   ├── config.py           # Settings frozen dataclass + JSON/env loaders
+│   └── exceptions.py       # Typed exception hierarchy
 ├── email_parser/
 │   ├── parser.py           # Gmail thread → ParsedEmail dataclass
 │   └── attachment_reader.py # Gemini Files API attachment summarisation
-├── gmail_client/
-│   ├── auth.py             # OAuth2 flow + token refresh
-│   └── gmail_client.py     # Gmail API wrapper (read, draft, send, label)
-├── routes/                 # Flask blueprints (one per page)
+├── gmail/                  # Gmail API + OAuth + IMAP IDLE
+│   ├── auth.py             # OAuth2 flow (allow_oauth_flow parameter)
+│   ├── client.py           # GmailClient — all Gmail API calls
+│   ├── imap_watcher.py     # IMAP IDLE watcher → fires wake_event on new mail
+│   └── token_manager.py    # Background proactive token refresh
+├── history/
+│   └── interaction_store.py # Per-contact interaction memory (last 10 sent replies)
+├── observability/          # Debugging and monitoring
+│   ├── log_writer.py       # AgentLogger — rotating structured JSON log
+│   ├── state.py            # StateManager — persisted system health snapshot
+│   └── trace.py            # ProcessingTrace + TraceStore (last 50 email traces)
+├── routes/                 # Flask blueprints (one per page + debug)
 ├── signature/
-│   └── signature.py        # HTML + plain-text signature with SVG icons
+│   └── signature.py        # HTML + plain-text email signature builder
 ├── storage/
-│   └── app_config.py       # config.json read/write; writable data-dir resolution
-├── templates/
-│   ├── components/
-│   │   └── macros.html     # Jinja2 component macros (single source of truth)
-│   └── setup/              # 4-step onboarding wizard
-├── static/
-│   ├── css/style.css       # Design token system + component classes
-│   └── js/app.js           # Alpine.js stores (agentStore, reviewStore)
-├── app.py                  # Flask factory
-├── launcher.py             # Entry point: sets data dir, opens browser, starts Flask
-├── config.py               # Settings dataclass + .env / JSON loaders
+│   └── app_config.py       # config.json read/write + data directory resolution
+├── templates/              # Jinja2 templates + macros
+├── static/                 # CSS design system + Alpine.js stores + brand icons
+├── app.py                  # Flask factory — registers blueprints, auto-starts daemon
+├── launcher.py             # Entry point: data dir, stale-process eviction, port, browser
+├── main.py                 # CLI interface (run / bulk / contacts commands)
 └── email_agent.spec        # PyInstaller build spec
 ```
 
@@ -91,20 +101,23 @@ Email Agent/
 
 ```
 Gmail Inbox
-    │ list_unread_thread_ids()
+    │ history_list() / list_unread_thread_ids()   ← IMAP IDLE triggers immediately
     ▼
-AgentDaemon._process_unread()
-    ├─ summarise()          → thread summary (Gemini)
-    ├─ classify()           → priority / skip (Gemini)
-    ├─ fetch_and_summarise() → attachment context (Gemini Files API)
-    └─ generate()           → reply body (Gemini)
-         │ assemble()       → greeting + body + HTML signature
-         ▼
-    ReviewQueue (in-memory)
-         │ user action via /review
-         ├─ send_message()  → sends immediately
-         ├─ create_draft()  → saves to Gmail Drafts
-         └─ discard()       → removed, no Gmail action
+AgentDaemon._process_unread_incremental()
+    └─ EmailPipeline.process_batch(thread_ids)
+           ├─ parse_thread()              → ParsedEmail
+           ├─ _should_skip_as_observer()  → structural skip (To/CC/BCC + greeting check)
+           ├─ summarise()                 → thread summary (Gemini call 1)
+           ├─ classify()                  → priority / skip (Gemini call 2)
+           ├─ fetch_and_summarise()       → attachment context (Gemini Files API, conditional)
+           └─ generate()                  → reply body (Gemini call 3)
+                │ assemble()              → greeting + body + HTML signature
+                ▼
+          ReviewQueue (in-memory)
+               │ user action via /review
+               ├─ send_message()  → sends immediately
+               ├─ create_draft()  → saves to Gmail Drafts
+               └─ discard()       → removed, no Gmail action
 ```
 
 ---
@@ -221,6 +234,7 @@ All settings are managed through the web UI (Settings page) and stored in:
 | Fallback Model | Model name for the fallback provider (default: `llama-3.3-70b-versatile` for Groq) |
 | Fallback Base URL | API endpoint — change this URL to switch provider without code changes |
 | Ollama | Optional local model fallback — free, no API key, requires Ollama installed |
+| Name Aliases | Comma-separated alternate names / nicknames (e.g. `Muhammad, Tawhid, Tareq`). Used by the greeting-match check to avoid misidentifying emails addressed to a variant of your name |
 | Signature | Name, title, company, phone, social links with brand icons |
 
 ---

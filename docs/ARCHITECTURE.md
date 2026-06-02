@@ -67,35 +67,54 @@ Email Agent is a **locally-run AI email assistant**. It connects to a user's Gma
 Email Agent/
 │
 ├── agent/
-│   ├── daemon.py          # Core polling loop — classify → summarise → generate → queue
-│   └── review_queue.py    # Thread-safe in-memory dict keyed by item UUID
+│   ├── daemon.py          # Lifecycle: start/stop, IMAP IDLE, token, historyId (~330 lines)
+│   ├── pipeline.py        # Per-email AI processing: parse → skip → classify → generate → queue
+│   └── queue.py           # Thread-safe in-memory ReviewQueue singleton (dict keyed by UUID)
 │
 ├── ai/
-│   ├── prompts.py         # All Gemini prompt builders (system, classify, summarise, bulk)
-│   └── reply_generator.py # Gemini API wrapper with retry/back-off logic
-│
-├── assembler.py           # Pure function: greeting + body + signature → final HTML
+│   ├── assembler.py       # Pure function: greeting + body + signature → final HTML
+│   ├── generator.py       # ReplyGenerator — generate / classify / summarise / extract_topics
+│   ├── prompts.py         # All prompt builders (system, classify, summarise, user message)
+│   └── providers/
+│       ├── base.py        # LLMProvider ABC
+│       ├── router.py      # FallbackRouter — tries providers in order on soft failure
+│       ├── gemini_provider.py
+│       ├── openai_compatible_provider.py  # Groq, Grok, OpenAI, Mistral (httpx, no SDK)
+│       └── ollama_provider.py
 │
 ├── bulk/
-│   └── bulk_sender.py     # Batch draft generation; reuses _process_row from daemon
+│   └── bulk_sender.py     # Batch draft generation from CSV / manual list / contacts
 │
 ├── contacts/
 │   └── contact_store.py   # JSON-backed ContactProfile store (upsert, lookup, list)
+│
+├── core/
+│   ├── config.py          # Settings frozen dataclass + load_settings_from_dict()
+│   └── exceptions.py      # Typed exception hierarchy (AuthError, GenerationError, …)
 │
 ├── email_parser/
 │   ├── parser.py          # Gmail thread JSON → ParsedEmail dataclass
 │   └── attachment_reader.py # Gemini Files API summarisation for PDFs/images
 │
-├── exceptions.py          # Typed exception hierarchy
-│
-├── gmail_client/
+├── gmail/
 │   ├── auth.py            # OAuth2 flow, token refresh, allow_oauth_flow guard
-│   └── gmail_client.py    # Gmail API wrapper (threads, drafts, send, labels)
+│   ├── client.py          # GmailClient — all Gmail API calls (threads, drafts, send, labels)
+│   ├── imap_watcher.py    # IMAP IDLE watcher → fires wake_event on new mail
+│   └── token_manager.py   # Background proactive token refresh (5 min ahead of expiry)
+│
+├── history/
+│   └── interaction_store.py # Per-contact interaction memory (last 10 sent replies + topics)
+│
+├── observability/
+│   ├── log_writer.py      # AgentLogger — rotating structured JSON log (5 MB × 3)
+│   ├── state.py           # StateManager — persisted system health snapshot
+│   └── trace.py           # ProcessingTrace + TraceStore (last 50 email traces)
 │
 ├── routes/
-│   ├── bulk.py            # /bulk — job submission + background tracking
+│   ├── bulk.py            # /bulk — job submission + background progress tracking
 │   ├── contacts.py        # /contacts — CRUD + CSV import
-│   ├── dashboard.py       # /dashboard + /api/status + /api/agent/* + /api/shutdown
+│   ├── dashboard.py       # / + /api/status + /api/agent/* + /api/shutdown
+│   ├── debug.py           # /debug — live observability dashboard
 │   ├── review.py          # /review — queue display, send/draft/discard actions
 │   ├── settings.py        # /settings — config form + /api/auth/switch
 │   ├── setup.py           # /setup/step1-4 — onboarding wizard + OAuth thread
@@ -117,14 +136,20 @@ Email Agent/
 │   ├── components/macros.html  # Jinja2 macros: input_field, btn, badge, avatar…
 │   ├── dashboard.html
 │   ├── contacts.html
+│   ├── debug.html
 │   ├── settings.html
 │   ├── review.html
 │   ├── bulk.html
+│   ├── templates_page.html
 │   └── setup/step1-4.html # Onboarding wizard pages
 │
-├── app.py                 # Flask factory; daemon auto-start if token exists
-├── config.py              # Settings frozen dataclass + load_settings_from_dict()
-├── launcher.py            # Entry point: data dir, stale-instance eviction, Flask start
+├── docs/
+│   ├── ARCHITECTURE.md    # This file
+│   └── SETUP.md
+│
+├── app.py                 # Flask factory; registers blueprints, auto-starts daemon
+├── launcher.py            # Entry point: data dir, stale-instance eviction, port, browser
+├── main.py                # CLI interface (run / bulk / contacts commands)
 └── email_agent.spec       # PyInstaller build spec
 ```
 
@@ -383,7 +408,7 @@ The activity log entry is added with `level="pending"` (amber) at this point. Wh
 
 ### 5.1 Gmail OAuth & Token Management
 
-**File:** `gmail_client/auth.py`
+**Files:** `gmail/auth.py`, `gmail/token_manager.py`
 
 The OAuth flow has two modes controlled by the `allow_oauth_flow` parameter:
 
@@ -403,8 +428,10 @@ allow_oauth_flow=False (daemon thread)
 
 **Scope:** `gmail.modify` (not `gmail.readonly`) is required because the agent needs to apply labels (`mark_as_processed`, `apply_priority_label`) and create/send drafts.
 
-**Token path:** `{DATA_DIR}/credentials/token.json`  
+**Token path:** `{DATA_DIR}/credentials/token.json`
 **Credentials path:** `{DATA_DIR}/credentials/credentials.json` (or `sys._MEIPASS/credentials/credentials.json` in frozen builds)
+
+See §System 5 (Proactive Token Lifecycle Management) for background refresh details.
 
 ### 5.2 Email Parsing
 
@@ -433,17 +460,20 @@ The parser builds a `_header_map` (lowercased header name → value) for each me
 
 Address parsing uses regex `[\w.+-]+@[\w.-]+\.\w+` on the full header value (which may contain display names like `"Alice <alice@example.com>, Bob <bob@example.com>"`). This is intentionally simple — RFC 5321 address parsing is complex and the regex covers all real-world cases adequately.
 
-### 5.3 Gemini Integration
+### 5.3 Gemini Integration & LLM Failover
 
-**File:** `ai/reply_generator.py`
+**Files:** `ai/generator.py`, `ai/providers/`
 
-All Gemini calls go through `_call()`, which implements exponential back-off for rate limits (429 / `RESOURCE_EXHAUSTED`) and surfaces auth errors immediately:
+`ReplyGenerator` delegates all LLM calls to a `FallbackRouter` that holds an ordered list of providers. On any `ProviderUnavailableError` (rate limit, timeout, 5xx), the router transparently tries the next provider. Hard failures (`GenerationError`: invalid key, content policy) propagate immediately.
 
 ```
-Attempt 0 → wait 2 s → Attempt 1 → wait 4 s → Attempt 2 → wait 8 s → raise GenerationError
+FallbackRouter.generate()
+    ├── GeminiProvider          (primary — google-genai SDK)
+    ├── OpenAICompatibleProvider (Groq / xAI Grok / OpenAI / Mistral — httpx only, no SDK)
+    └── OllamaProvider          (local model, no API key, requires Ollama installed)
 ```
 
-**System prompt caching:** The system prompt is built once in `ReplyGenerator.__init__()` and stored as `self._system_prompt`. Since it contains the persona instructions, knowledge base facts, and auto-translate rule — all of which are constant for a given settings load — rebuilding it per-email would be wasteful.
+**System prompt caching:** Built once in `ReplyGenerator.__init__()` and stored as `self._system_prompt`. Contains persona instructions, knowledge base facts, and auto-translate rule — all constant for a given settings load. Passed to every provider at construction time.
 
 **Three distinct Gemini calls per email:**
 
@@ -457,7 +487,7 @@ The `classify()` call uses a separate system instruction (not the persona prompt
 
 ### 5.4 Review Queue
 
-**File:** `agent/review_queue.py`
+**File:** `agent/queue.py`
 
 A `threading.Lock`-protected in-memory `dict[str, dict]` keyed by item UUID. The module exports a single `review_queue = ReviewQueue()` singleton. Both the daemon (writer) and the review route (reader/mutator) share this singleton directly — no message passing, no serialisation.
 
@@ -469,7 +499,7 @@ A `threading.Lock`-protected in-memory `dict[str, dict]` keyed by item UUID. The
 
 ### 5.5 Email Assembly & Signature
 
-**Files:** `assembler.py`, `signature/signature.py`
+**Files:** `ai/assembler.py`, `signature/signature.py`
 
 `assemble()` is a **pure function** — it has no side effects and no I/O. It takes three strings and returns one. This makes it trivially testable and reusable in both the daemon pipeline and the bulk sender.
 
@@ -541,13 +571,27 @@ Temp CSV files are always deleted in the `finally` block of `_run_bulk_job()` re
 
 ### 5.8 Configuration & Storage
 
-**File:** `storage/app_config.py`, `config.py`
+**Files:** `storage/app_config.py`, `core/config.py`
 
 All file paths are resolved through `_data_dir()` which reads `EMAIL_AGENT_DATA_DIR` at call time. This late-binding is critical: `launcher.py` sets the env var before importing Flask, so by the time any route imports `storage.app_config`, the correct data directory is already set.
 
 `save_config()` uses **atomic rename** (write to `.tmp`, then `tmp.replace(config.json)`). This prevents config corruption if the process is killed mid-write.
 
 `Settings` is a **frozen dataclass** loaded once at daemon startup from the JSON config. It is the single source of truth for runtime behaviour. The daemon does not watch for config changes — changes take effect on the next start (or immediately if "Save Settings" triggers a daemon restart via the settings route).
+
+### 5.9 Observability
+
+**Files:** `observability/log_writer.py`, `observability/trace.py`, `observability/state.py`
+
+Three independent observability layers, all writing to `{DATA_DIR}/debug/` and `{DATA_DIR}/logs/`:
+
+**`AgentLogger` (`log_writer.py`):** Rotating structured JSON log (`agent.log`, 5 MB × 3 files). Each line is a JSON object with `timestamp`, `level`, `event`, and event-specific fields. Surfaced as a live tail on the `/debug` page.
+
+**`TraceStore` (`trace.py`):** Keeps the last 50 per-email processing traces in memory and persists them to `traces.json`. Each trace records every decision made for one email: skip reason, classification priority, greeting mismatch note, generation time. Expandable per-email accordion on `/debug`.
+
+**`StateManager` (`state.py`):** Persists a health snapshot to `state.json` on every daemon cycle — daemon running state, IMAP status, token expiry, draft count, last poll time. Loaded at startup so `/debug` shows meaningful data even before the daemon runs its first cycle.
+
+The **Debug Dashboard** at `/debug` aggregates all three layers into a single page: system health cards, per-email trace accordion, and a live structured log tail.
 
 ---
 
@@ -569,6 +613,8 @@ This is the most nuanced part of the system. It prevents the agent from generati
 │      CC-only:    own_email in cc_addresses AND not in to_addresses     │
 │      BCC:        to_addresses non-empty AND own_email absent from both │
 │      Teammate:   sender is internal AND user is CC/BCC                 │
+│  • Greeting cross-check (CC/BCC only): _names_match() compares the    │
+│    greeted name against _user_name_variants() — see §Greeting below   │
 └────────────────────────────────────────────────────────────────────────┘
                               ↓ passes
 ┌────────────────────────────────────────────────────────────────────────┐
@@ -578,11 +624,32 @@ This is the most nuanced part of the system. It prevents the agent from generati
 │  • priority == "skip": newsletter, marketing, automated, bulk          │
 │  • needs_reply == false: FYI, announcement, receipt, out-of-office,   │
 │    group update where no individual reply is expected                  │
+│  • greeting_note injected when _names_match() finds no match and user  │
+│    is not a direct addressee — soft hint only, Gemini decides          │
 │  • Fallback: needs_reply=True on any parse failure (conservative)      │
 └────────────────────────────────────────────────────────────────────────┘
                               ↓ passes
                Reply generation proceeds
 ```
+
+### Greeting name matching
+
+**Files:** `agent/pipeline.py` — `_extract_greeting_names()`, `_names_match()`, `_user_name_variants()`
+
+The pipeline extracts the greeted name from the first 250 characters of the email body (regex pattern: `hi / hello / dear / hey …`). This is compared against the user's known name variants via `_names_match()`, which runs three passes in order of cost:
+
+| Pass | Example | Rule |
+|---|---|---|
+| Exact | "tawhid" == "tawhid" | Direct set membership |
+| Prefix | "tawhid" starts "tawhidul" | Shorter token ≥ 4 chars must be a prefix of the longer |
+| Fuzzy | "tarek" ≈ "tareq" | Both ≥ 4 chars, length diff ≤ 2, `SequenceMatcher.ratio()` ≥ 0.80 |
+
+`_user_name_variants()` builds the user's variant set from three sources:
+1. Tokens from `settings.signature_name` split on whitespace/dots ("Md. Tawhidul Islam" → `{"md", "tawhidul", "islam"}`)
+2. Tokens from the email address prefix (`mtawhidulislam7` → `{"mtawhidulislam7"}`)
+3. Entries from `settings.name_aliases` (comma-separated, e.g. `"Muhammad, Mohamed, Tawhid, Tareq"`)
+
+The greeting check only triggers a **hard skip** when the user is already identified as a CC/BCC observer. For direct `To:` recipients, a greeting mismatch only adds a soft `greeting_note` hint to the Gemini classifier — it never blocks processing unilaterally.
 
 ### Teammate identification
 
@@ -1007,7 +1074,7 @@ Total:                              ~3,130 tokens  ← trivial for any model
 
 **Architecture:** Two components replace the single polling `time.sleep()` loop:
 
-**`gmail_client/imap_watcher.py` — ImapIdleWatcher:**
+**`gmail/imap_watcher.py` — ImapIdleWatcher:**
 - Persistent TLS connection to `imap.gmail.com:993`
 - XOAUTH2 authentication using the OAuth2 access token
 - `IDLE` command — server sends `* N EXISTS` when new mail arrives
@@ -1031,7 +1098,7 @@ Total:                              ~3,130 tokens  ← trivial for any model
 
 **Problem:** OAuth access tokens expire every ~60 minutes. Synchronous refresh only triggered on failure; blocks operations; can crash the IMAP session.
 
-**`gmail_client/token_manager.py` — TokenManager:**
+**`gmail/token_manager.py` — TokenManager:**
 - Holds credentials in a `threading.RLock`-protected variable
 - Background thread checks expiry every 30 seconds
 - Refreshes proactively 5 minutes before expiry

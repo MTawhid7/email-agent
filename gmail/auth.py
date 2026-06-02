@@ -6,7 +6,10 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 
 from core.exceptions import AuthError
 
-_SCOPES = ["https://www.googleapis.com/auth/gmail.modify"]
+_SCOPES = [
+    "https://www.googleapis.com/auth/gmail.modify",
+    "https://mail.google.com/",  # required for IMAP XOAUTH2
+]
 _TOKEN_PATH = "credentials/token.json"
 
 
