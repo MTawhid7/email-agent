@@ -8,7 +8,23 @@
     <h1 class="page-title">Review Queue</h1>
     <p class="page-subtitle">Edit, send, or discard AI-generated replies before they reach Gmail.</p>
   </div>
-  <span style="font-size:var(--text-sm);color:var(--text-tertiary);">{{ items|length }} pending</span>
+  <div style="display:flex;align-items:center;gap:var(--sp-3);">
+    <span style="font-size:var(--text-sm);color:var(--text-tertiary);">{{ items|length }} pending</span>
+    {% if items %}
+    <form method="POST" action="/review/send-all"
+      onsubmit="return confirm('Send all {{ items|length }} email{{ \'s\' if items|length != 1 else \'\' }} now? Each will be sent immediately without further review. This cannot be undone.')">
+      <button type="submit" class="btn btn-primary btn-sm"
+        style="display:flex;align-items:center;gap:6px;">
+        <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"
+          viewBox="0 0 24 24" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round"
+            d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5"/>
+        </svg>
+        Send All ({{ items|length }})
+      </button>
+    </form>
+    {% endif %}
+  </div>
 </div>
 
 {% if not items %}

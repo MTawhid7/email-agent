@@ -1,4 +1,4 @@
-from flask import Blueprint, jsonify, redirect, render_template, request, url_for
+from flask import Blueprint, flash, jsonify, redirect, render_template, request, url_for
 
 import app as app_module
 from agent.queue import review_queue
@@ -67,6 +67,43 @@ def review_draft(item_id: str):
 def review_discard(item_id: str):
     review_queue.remove(item_id)
     app_module.daemon.resolve_review_item(item_id, "discarded")
+    return redirect(url_for("review.review"))
+
+
+@review_bp.route("/review/send-all", methods=["POST"])
+def review_send_all():
+    items = list(review_queue.all())
+    if not items:
+        return redirect(url_for("review.review"))
+
+    gmail = _gmail()
+    sent = 0
+    failed = 0
+
+    for snapshot in items:
+        item = review_queue.get(snapshot["id"])
+        if not item:
+            continue
+        try:
+            gmail.send_message(
+                to=item["sender_email"],
+                subject=item["subject"],
+                body_html=item["body_html"],
+                thread_id=item.get("thread_id") or None,
+                in_reply_to=item.get("message_id_header") or None,
+                references=item.get("message_id_header") or None,
+            )
+            review_queue.remove(item["id"])
+            app_module.daemon.resolve_review_item(item["id"], "sent")
+            sent += 1
+        except Exception:
+            failed += 1
+
+    if failed:
+        flash(f"Sent {sent} email(s). {failed} failed — check the Debug log.", "error")
+    else:
+        flash(f"Sent {sent} email(s) successfully.", "success")
+
     return redirect(url_for("review.review"))
 
 
